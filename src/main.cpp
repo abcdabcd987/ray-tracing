@@ -58,6 +58,11 @@ int main(int argc, char** argv)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
+
+    const int trace_depth = 6;
+    RayTracer tracer;
+
+#if 0
     Plane p1(Vector3(0, 1, 0), 4.4f);
     p1.light = 0;
     p1.material.k_reflect = 0;
@@ -79,14 +84,94 @@ int main(int argc, char** argv)
     Sphere p5(Vector3(2, 5, 1), 0.1f);
     p5.light = 1;
     p5.material.color = Color(0.7f, 0.7f, 0.9f);
+#endif
 
-    const int trace_depth = 10;
-    RayTracer tracer;
+    Material def_material = {
+            .color = Color(.2f, .2f, .2f),
+            .k_specular = .8f,
+            .k_ambient = 0,
+            .k_refract_index = 1.5f,
+            .k_refract = 0,
+            .k_diffuse = 0.2f,
+            .k_reflect = 0
+    };
+
+    Plane p0 = Plane(Vector3(0, 1, 0), 4.4f);
+    p0.material = def_material;
+    p0.material.k_reflect = 0.0f;
+    p0.material.k_refract = 0.0f;
+    p0.material.k_diffuse = 1.0f;
+    p0.material.color = Color(0.4f, 0.3f, 0.3f);
+    // big sphere
+    Sphere p1 = Sphere(Vector3(2, 0.8f, 3), 2.5f);
+    p1.material = def_material;
+    p1.material.k_reflect = 0.2f;
+    p1.material.k_refract = 0.8f;
+    p1.material.k_refract_index = 1.3f;
+    p1.material.color = Color(0.7f, 0.7f, 1.0f);
+    // small sphere
+    Sphere p2 = Sphere(Vector3(-5.5f, -0.5f, 7), 2);
+    p2.material = def_material;
+    p2.material.k_reflect = 0.5f;
+    p2.material.k_refract = 0.0f;
+    p2.material.k_refract_index = 1.3f;
+    p2.material.k_diffuse = 0.1f;
+    p2.material.color = Color(0.7f, 0.7f, 1.0f);
+    // light source 1
+    Sphere p3 = Sphere(Vector3(0, 5, 5), 0.1f);
+    p3.material = def_material;
+    p3.light = 1;
+    p3.material.color = Color(0.4f, 0.4f, 0.4f);
+    // light source 2
+    Sphere p4 = Sphere(Vector3(-3, 5, 1), 0.1f);
+    p4.material = def_material;
+    p4.light = 1;
+    p4.material.color = Color(0.6f, 0.6f, 0.8f);
+    // extra sphere
+    Sphere p5 = Sphere(Vector3(-1.5f, -3.8f, 1), 1.5f);
+    p5.material = def_material;
+    p5.material.k_reflect = 0.0f;
+    p5.material.k_refract = 0.8f;
+    p5.material.color = Color(1.0f, 0.4f, 0.4f);
+    // back plane
+    Plane p6 = Plane(Vector3(0.4f, 0, -1), 12);
+    p6.material = def_material;
+    p6.material.k_reflect = 0.0f;
+    p6.material.k_refract = 0.0f;
+    p6.material.k_specular = 0;
+    p6.material.k_diffuse = 0.6f;
+    p6.material.color = Color(0.5f, 0.3f, 0.5f);
+    // ceiling plane
+    Plane p7 = Plane(Vector3(0, -1, 0), 7.4f);
+    p7.material = def_material;
+    p7.material.k_reflect = 0.0f;
+    p7.material.k_refract = 0.0f;
+    p7.material.k_specular = 0;
+    p7.material.k_diffuse = 0.5f;
+    p7.material.color = Color(0.4f, 0.7f, 0.7f);
+
+    tracer.scene.primitives.emplace_back(&p0);
     tracer.scene.primitives.emplace_back(&p1);
     tracer.scene.primitives.emplace_back(&p2);
     tracer.scene.primitives.emplace_back(&p3);
     tracer.scene.primitives.emplace_back(&p4);
     tracer.scene.primitives.emplace_back(&p5);
+    tracer.scene.primitives.emplace_back(&p6);
+    tracer.scene.primitives.emplace_back(&p7);
+    // grid
+    for (int x = 0; x < 8; x++)
+        for (int y = 0; y < 7; y++) {
+            // FIXME: memory leak.
+            Sphere *s = new Sphere(Vector3(-4.5f + x * 1.5f, -4.3f + y * 1.5f, 10), 0.3f);
+            s->material = def_material;
+            s->material.k_reflect = 0;
+            s->material.k_refract = 0;
+            s->material.k_specular = 0.6f;
+            s->material.k_diffuse = 0.6f;
+            s->material.color = Color(0.3f, 1.0f, 0.4f);
+            tracer.scene.primitives.emplace_back(s);
+        }
+
 
     tracer.render(data, width, height, trace_depth);
     glBindTexture(GL_TEXTURE_2D, tex);

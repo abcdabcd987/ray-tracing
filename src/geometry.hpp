@@ -21,6 +21,7 @@ struct Vector3 {
     friend Vector3 operator-(Vector3 u, const Vector3 &v) { return u -= v; }
     friend Vector3 operator*(Vector3 u, const Vector3 &v) { return u *= v; }
     friend Vector3 operator*(Vector3 u, float k) { return u *= k; }
+    friend Vector3 expf(const Vector3& v) { return Vector3(std::expf(v.x), std::expf(v.y), std::expf(v.z)); }
     Vector3 operator-() const { return Vector3(-x, -y, -z); }
     float dot(const Vector3 &v) const { return x * v.x + y * v.y + z * v.z; }
     float length2() const { return dot(*this); }
@@ -45,12 +46,15 @@ struct Material {
     Color color;
     float k_reflect;
     float k_diffuse;
+    float k_specular;
+    float k_refract;
+    float k_refract_index;
     float k_ambient;
 };
 
 
 struct IntersectionResult {
-    const enum {MISS, HIT, INSIDE} hit;
+    const enum HitType {MISS, HIT, INSIDE} hit;
     const float distance;
 };
 
@@ -58,6 +62,7 @@ struct IntersectionResult {
 struct Primitive {
     Material material;
     float light;
+    Primitive(): light(.0) {}
     virtual IntersectionResult intersect(const Ray& ray) const = 0;
     virtual Vector3 get_normal(const Vector3& pos) const = 0;
     virtual Color get_color(const Vector3 &pos) const { return material.color; }
@@ -68,7 +73,7 @@ struct Sphere : public Primitive {
     Vector3 center;
     float radius;
     Sphere(const Vector3 &center_, float radius_) :
-            center(center_), radius(radius_) {}
+            Primitive(), center(center_), radius(radius_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         Vector3 v = ray.origin - center;
@@ -95,7 +100,7 @@ struct Plane : public Primitive {
     Vector3 normal;
     float distance;
     Plane(const Vector3& normal_, float distance_) :
-            normal(normal_.normalized()), distance(distance_) {}
+            Primitive(), normal(normal_.normalized()), distance(distance_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         float d = normal.dot(ray.direction);

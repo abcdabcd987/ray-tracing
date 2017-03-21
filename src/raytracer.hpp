@@ -12,22 +12,24 @@ struct RayTracer {
 
     struct RayTraceResult {
         bool hit;
-        float dist;
+        float distance;
         Color color;
         const Primitive *primitive;
     };
 
-    RayTraceResult ray_trace(const Ray& ray, int remain_depth) const {
-        RayTraceResult res = {.hit = false, .dist = 0, .color = Color(0, 0, 0), .primitive = nullptr};
+    RayTraceResult ray_trace(const Ray& ray, float refract_index, int remain_depth) const {
+        RayTraceResult res = {.hit = false, .distance = 0, .color = Color(0, 0, 0), .primitive = nullptr};
         if (!remain_depth) return res;
 
         // find the nearest intersection
         float dist = std::numeric_limits<float>::max();
+        IntersectionResult::HitType hit_type = IntersectionResult::MISS;
         for (const Primitive *pr : scene.primitives) {
-            auto res_intersect = pr->intersect(ray);
-            if (res_intersect.hit != IntersectionResult::MISS && res_intersect.distance < dist) {
-                dist = res_intersect.distance;
+            auto r = pr->intersect(ray);
+            if (r.hit != IntersectionResult::MISS && r.distance < dist) {
+                dist = r.distance;
                 res.primitive = pr;
+                hit_type = r.hit;
             }
         }
 
@@ -35,11 +37,11 @@ struct RayTracer {
         if (!res.primitive) return res;
 
         // if light
-        if (res.primitive->light) return {.hit = true, .dist = dist, .color = Color(1.f, 1.f, 1.f), .primitive = res.primitive};
+        if (res.primitive->light) return {.hit = true, .distance = dist, .color = Color(1.f, 1.f, 1.f), .primitive = res.primitive};
 
         // if normal object
         res.hit = true;
-        res.dist = dist;
+        res.distance = dist;
         Vector3 pi = ray.origin + ray.direction * dist; // intersection point
         Vector3 N = res.primitive->get_normal(pi);
         for (const Primitive *pr : scene.primitives) {
@@ -56,8 +58,8 @@ struct RayTracer {
             Ray ray_shadow(pi + L * EPS, L);
             for (const Primitive *pr_shadow : scene.primitives) {
                 if (pr_shadow->light) continue;
-                IntersectionResult res_intersect = pr_shadow->intersect(ray_shadow);
-                if (res_intersect.hit != IntersectionResult::MISS && res_intersect.distance < dist_light) {
+                IntersectionResult r = pr_shadow->intersect(ray_shadow);
+                if (r.hit != IntersectionResult::MISS && r.distance < dist_light) {
                     shade = 0;
                     break;
                 }
@@ -72,7 +74,7 @@ struct RayTracer {
             }
 
             // specular shading
-            float k_specular = 1.f - k_diffuse;
+            float k_specular = res.primitive->material.k_specular;
             if (k_specular > 0) {
                 Vector3 V = ray.direction;
                 Vector3 R = L - 2.f * L.dot(N) * N;
@@ -87,9 +89,29 @@ struct RayTracer {
         if (k_reflect > 0) {
             Vector3 R = ray.direction - 2.f * ray.direction.dot(N) * N;
             Ray ray_reflect(pi + R * EPS, R);
-            RayTraceResult res_reflect = ray_trace(ray_reflect, remain_depth - 1);
-            if (res_reflect.hit)
-                res.color += k_reflect * res_reflect.color * res.primitive->material.color;
+            RayTraceResult r = ray_trace(ray_reflect, refract_index, remain_depth - 1);
+            if (r.hit)
+                res.color += k_reflect * r.color * res.primitive->material.color;
+        }
+
+        // refraction
+        float k_refract = res.primitive->material.k_refract;
+        if (k_refract > 0) {
+            float k_refract_index = res.primitive->material.k_refract_index;
+            float n = refract_index / k_refract_index;
+            Vector3 Nd = hit_type == IntersectionResult::INSIDE ? -N : N;
+            float cosI = -Nd.dot(ray.direction);
+            float cosT2 = 1.f - n * n * (1.f - cosI * cosI);
+            if (cosT2 > 0) {
+                Vector3 T = n * ray.direction + (n * cosI - sqrtf(cosT2)) * N;
+                Ray ray_refract(pi + T * EPS, T);
+                RayTraceResult r = ray_trace(ray_refract, k_refract_index, remain_depth - 1);
+                if (r.hit) {
+                    Color absorb = res.primitive->material.color * 0.15f * -r.distance;
+                    Color transparency = expf(absorb);
+                    res.color += r.color * transparency;
+                }
+            }
         }
 
         return res;
@@ -106,7 +128,7 @@ struct RayTracer {
             for (int x = 0; x < width; ++x) {
                 const float sx = wx1 + dx * x;
                 Ray ray(o, Vector3(sx, sy, 0) - o);
-                RayTraceResult res = ray_trace(ray, trace_depth);
+                RayTraceResult res = ray_trace(ray, 1.f, trace_depth);
                 if (res.hit) {
                     const int idx = (y * width + x) * 3;
                     color_add_to_array(&out[idx], res.color);
