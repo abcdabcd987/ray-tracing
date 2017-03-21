@@ -59,13 +59,17 @@ int main(int argc, char** argv)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     Plane p1(Vector3(0, 1, 0), 4.4f);
+    p1.light = 0;
     p1.material.k_reflect = 0;
     p1.material.k_diffuse = 1;
     p1.material.color = Color(0.4f, 0.3f, 0.3f);
     Sphere p2(Vector3(1, -0.8f ,3), 2.5f);
+    p2.light = 0;
     p2.material.k_reflect = 0.6;
+    p2.material.k_diffuse = 0.2;
     p2.material.color = Color(0.7f, 0.7f, 0.7f);
     Sphere p3(Vector3(-5.5f, -0.5f, 7.0f), 2);
+    p3.light = 0;
     p3.material.k_reflect = 1.0f;
     p3.material.k_diffuse = 0.1f;
     p3.material.color = Color(0.7f, 0.7f, 1.0f);
@@ -75,6 +79,8 @@ int main(int argc, char** argv)
     Sphere p5(Vector3(2, 5, 1), 0.1f);
     p5.light = 1;
     p5.material.color = Color(0.7f, 0.7f, 0.9f);
+
+    const int trace_depth = 10;
     RayTracer tracer;
     tracer.scene.primitives.emplace_back(&p1);
     tracer.scene.primitives.emplace_back(&p2);
@@ -82,7 +88,7 @@ int main(int argc, char** argv)
     tracer.scene.primitives.emplace_back(&p4);
     tracer.scene.primitives.emplace_back(&p5);
 
-    tracer.render(data, width, height);
+    tracer.render(data, width, height, trace_depth);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
@@ -152,8 +158,23 @@ int main(int argc, char** argv)
                 glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
                 state = (state + 1) % (sizeof(funcs) / sizeof(*funcs));
             }
+
+            ImVec2 tex_screen_pos = ImGui::GetCursorScreenPos();
             ImTextureID texid = reinterpret_cast<ImTextureID>(tex);
             ImGui::Image(texid, ImVec2(width, height));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::BeginTooltip();
+                float focus_sz = 32.0f;
+                float focus_x = ImGui::GetMousePos().x - tex_screen_pos.x - focus_sz * 0.5f; if (focus_x < 0.0f) focus_x = 0.0f; else if (focus_x > width  - focus_sz) focus_x = width  - focus_sz;
+                float focus_y = ImGui::GetMousePos().y - tex_screen_pos.y - focus_sz * 0.5f; if (focus_y < 0.0f) focus_y = 0.0f; else if (focus_y > height - focus_sz) focus_y = height - focus_sz;
+                ImGui::Text("Min: (%.2f, %.2f)", focus_x, focus_y);
+                ImGui::Text("Max: (%.2f, %.2f)", focus_x + focus_sz, focus_y + focus_sz);
+                ImVec2 uv0 = ImVec2((focus_x) / width, (focus_y) / height);
+                ImVec2 uv1 = ImVec2((focus_x + focus_sz) / width, (focus_y + focus_sz) / height);
+                ImGui::Image(texid, ImVec2(128,128), uv0, uv1, ImColor(255,255,255,255), ImColor(255,255,255,128));
+                ImGui::EndTooltip();
+            }
             ImGui::End();
         }
 

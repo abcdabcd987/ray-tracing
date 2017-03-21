@@ -3,6 +3,8 @@
 #include <cmath>
 #include <vector>
 
+constexpr float EPS = 1e-4;
+
 struct Vector3 {
     union {
         struct { float x, y, z; };
