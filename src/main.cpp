@@ -4,6 +4,7 @@
 #include <GL/gl3w.h>
 #include <SDL.h>
 #include <functional>
+#include "raytracer.hpp"
 
 int main(int argc, char** argv)
 {
@@ -56,6 +57,33 @@ int main(int argc, char** argv)
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    Plane p1(Vector3(0, 1, 0), 4.4f);
+    p1.material.k_reflect = 0;
+    p1.material.k_diffuse = 1;
+    p1.material.color = Color(0.4f, 0.3f, 0.3f);
+    Sphere p2(Vector3(1, -0.8f ,3), 2.5f);
+    p2.material.k_reflect = 0.6;
+    p2.material.color = Color(0.7f, 0.7f, 0.7f);
+    Sphere p3(Vector3(-5.5f, -0.5f, 7.0f), 2);
+    p3.material.k_reflect = 1.0f;
+    p3.material.k_diffuse = 0.1f;
+    p3.material.color = Color(0.7f, 0.7f, 1.0f);
+    Sphere p4(Vector3(0, 5, 5), 0.1f);
+    p4.light = 1;
+    p4.material.color = Color(0.6f, 0.6f, 0.6f);
+    Sphere p5(Vector3(2, 5, 1), 0.1f);
+    p5.light = 1;
+    p5.material.color = Color(0.7f, 0.7f, 0.9f);
+    RayTracer tracer;
+    tracer.scene.primitives.emplace_back(&p1);
+    tracer.scene.primitives.emplace_back(&p2);
+    tracer.scene.primitives.emplace_back(&p3);
+    tracer.scene.primitives.emplace_back(&p4);
+    tracer.scene.primitives.emplace_back(&p5);
+
+    tracer.render(data, width, height);
+    glBindTexture(GL_TEXTURE_2D, tex);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
     // Main loop

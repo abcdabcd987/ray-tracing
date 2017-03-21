@@ -19,7 +19,7 @@ include_directories(
         vendor/imgui/examples/sdl_opengl3_example)
 
 set(SOURCE_CODE
-        src/main.cpp)
+        src/main.cpp src/geometry.hpp src/raytracer.hpp)
 add_executable(ray_tracing ${SOURCE_CODE} ${IMGUI_SRC})
 target_link_libraries(ray_tracing ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES})
 
