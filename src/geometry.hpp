@@ -28,6 +28,7 @@ struct Vector3 {
     friend Vector3 expf(const Vector3& v) { return Vector3(std::expf(v.x), std::expf(v.y), std::expf(v.z)); }
     Vector3 operator-() const { return Vector3(-x, -y, -z); }
     float dot(const Vector3 &v) const { return x * v.x + y * v.y + z * v.z; }
+    Vector3 cross(const Vector3 &v) const { return Vector3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x); }
     float length2() const { return dot(*this); }
     float length() const { return sqrtf(length2()); }
     Vector3 normalized() const {
@@ -195,4 +196,19 @@ inline void color_add_to_array(uint8_t *out, const Color &color) {
 
 inline float randf() {
     return rand() / static_cast<float>(RAND_MAX);
+}
+
+inline void save_ppm(const char *path, uint8_t *data, int width, int height) {
+    FILE *f = fopen(path, "w");
+    fprintf(f, "P3\n");
+    fprintf(f, "%d %d\n", width, height);
+    fprintf(f, "255\n");
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            int i = (y * width + x) * 3;
+            fprintf(f, "%u\t%u\t%u\t", data[i], data[i+1], data[i+2]);
+        }
+        fprintf(f, "\n");
+    }
+    fclose(f);
 }

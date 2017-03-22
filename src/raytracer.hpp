@@ -1,4 +1,5 @@
 #pragma once
+#include <chrono>
 #include <limits>
 #include <vector>
 #include <cstdint>
@@ -6,11 +7,18 @@
 #include "geometry.hpp"
 
 struct RayTracer {
+    struct TraceConfig {
+        int num_trace_depth = 6;
+        int num_box_light_sample = 256;
+        int num_diffuse_reflect_sample = 128;
+
+        TraceConfig() {}
+    };
+
     Scene scene;
-
-    const int NUM_BOX_LIGHT_SAMPLE = 64;
-
-    RayTracer(): scene() {}
+    TraceConfig config;
+    int cnt_rendered;
+    RayTracer(): scene(), config() {}
 
     struct FindNearestResult {
         bool hit;
@@ -50,8 +58,8 @@ struct RayTracer {
         } else if (const Box *lb = dynamic_cast<const Box*>(light)) {
             Vector3 L(0, 0, 0);
             float shade = .0;
-            const int n = static_cast<int>(sqrt(NUM_BOX_LIGHT_SAMPLE));
-            assert(n*n == NUM_BOX_LIGHT_SAMPLE);
+            const int n = static_cast<int>(sqrt(config.num_box_light_sample));
+            assert(n*n == config.num_box_light_sample);
             for (int i = 0; i < n; ++i)
                 for (int j = 0; j < n; ++j) {
                     Vector3 ratio(randf() * (i+1)/n, randf(), randf() * (j+1)/n);
@@ -60,7 +68,7 @@ struct RayTracer {
                     L += light_diff.normalized();
                     shade += calc_shade_point_light(lb, light_diff, pi);
                 }
-            return {.shade = shade / NUM_BOX_LIGHT_SAMPLE, .light_direction = L / NUM_BOX_LIGHT_SAMPLE};
+            return {.shade = shade / config.num_box_light_sample, .light_direction = L / config.num_box_light_sample};
             // FIXME: This assumes y is small
 //            for (int i = 0; i < NUM_BOX_LIGHT_SAMPLE; ++i) {
 //                Vector3 ratio(randf(), randf(), randf());
@@ -80,9 +88,9 @@ struct RayTracer {
         Color color;
         const Primitive *primitive;
     };
-    RayTraceResult ray_trace(const Ray& ray, float refract_index, int remain_depth) const {
+    RayTraceResult ray_trace(const Ray& ray, float refract_index, int depth) const {
         RayTraceResult res = {.hit = false, .distance = 0, .color = Color(0, 0, 0), .primitive = nullptr};
-        if (!remain_depth) return res;
+        if (depth > config.num_trace_depth) return res;
 
         // find the nearest intersection
         float dist = std::numeric_limits<float>::max();
@@ -138,11 +146,34 @@ struct RayTracer {
         // reflection
         float k_reflect = res.primitive->material.k_reflect;
         if (k_reflect > 0) {
-            Vector3 R = ray.direction - 2.f * ray.direction.dot(N) * N;
-            Ray ray_reflect(pi + R * EPS, R);
-            RayTraceResult r = ray_trace(ray_reflect, refract_index, remain_depth - 1);
-            if (r.hit)
-                res.color += k_reflect * r.color * res.primitive->material.color;
+            float k_diffuse_reflect = res.primitive->material.k_diffuse_reflect;
+            if (k_diffuse_reflect > 0 && depth < 2) {
+                // diffuse reflection: only primary ray
+                Vector3 RP = ray.direction - 2.f * ray.direction.dot(N) * N;
+                Vector3 RN1 = Vector3(RP.z, RP.y, -RP.x);
+                Vector3 RN2 = RP.cross(RN1);
+                Color c(0, 0, 0);
+                for (int i = 0; i < config.num_diffuse_reflect_sample; ++i) {
+                    float xoff, yoff;
+                    do {
+                        xoff = randf() * k_diffuse_reflect;
+                        yoff = randf() * k_diffuse_reflect;
+                    } while (xoff * xoff + yoff * yoff > k_diffuse_reflect * k_diffuse_reflect);
+                    Vector3 R = (RP + RN1 * xoff + RN2 * yoff * k_diffuse_reflect).normalized();
+                    Ray ray_reflect(pi + R * EPS, R);
+                    RayTraceResult r = ray_trace(ray_reflect, refract_index, depth + 1);
+                    if (r.hit)
+                        c += k_reflect * r.color * res.primitive->material.color;
+                }
+                res.color += c / config.num_diffuse_reflect_sample;
+            } else {
+                // perfect reflection
+                Vector3 R = ray.direction - 2.f * ray.direction.dot(N) * N;
+                Ray ray_reflect(pi + R * EPS, R);
+                RayTraceResult r = ray_trace(ray_reflect, refract_index, depth + 1);
+                if (r.hit)
+                    res.color += k_reflect * r.color * res.primitive->material.color;
+            }
         }
 
         // refraction
@@ -156,7 +187,7 @@ struct RayTracer {
             if (cosT2 > 0) {
                 Vector3 T = n * ray.direction + (n * cosI - sqrtf(cosT2)) * N;
                 Ray ray_refract(pi + T * EPS, T);
-                RayTraceResult r = ray_trace(ray_refract, k_refract_index, remain_depth - 1);
+                RayTraceResult r = ray_trace(ray_refract, k_refract_index, depth + 1);
                 if (r.hit) {
                     Color absorb = res.primitive->material.color * 0.15f * -r.distance;
                     Color transparency = expf(absorb);
@@ -169,22 +200,36 @@ struct RayTracer {
     }
 
     // TODO: camera position, screen position, z direction
-    void render(uint8_t *out, int width, int height, int trace_depth) {
+    void render(uint8_t *out, int width, int height, TraceConfig config_) {
+        config = config_;
+        cnt_rendered = 0;
         float wx1 = -4, wx2 = 4, wy1 = 3, wy2 = -3;
         float dx = (wx2 - wx1) / width;
         float dy = (wy2 - wy1) / height;
         Vector3 o(0, 0, -5);
+        fprintf(stderr, "start rendering\n");
+        auto last = std::chrono::high_resolution_clock::now();
         for (int y = 0; y < height; ++y) {
             const float sy = wy1 + dy * y;
             for (int x = 0; x < width; ++x) {
                 const float sx = wx1 + dx * x;
                 Ray ray(o, Vector3(sx, sy, 0) - o);
-                RayTraceResult res = ray_trace(ray, 1.f, trace_depth);
+                RayTraceResult res = ray_trace(ray, 1.f, 0);
                 if (res.hit) {
                     const int idx = (y * width + x) * 3;
                     color_add_to_array(&out[idx], res.color);
                 }
+                ++cnt_rendered;
+                auto now = std::chrono::high_resolution_clock::now();
+                auto diff = now - last;
+                long long ns = diff.count();
+                double ms = ns / 1e6;
+                if (ms > 50) {
+                    fprintf(stderr, "\rdone %d/%d", y * width + x + 1, width * height);
+                    last = now;
+                }
             }
         }
+        fprintf(stderr, "\n");
     }
 };

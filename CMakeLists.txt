@@ -19,7 +19,7 @@ include_directories(
         vendor/imgui/examples/sdl_opengl3_example)
 
 set(SOURCE_CODE
-        src/geometry.hpp src/raytracer.hpp)
+        src/geometry.hpp src/raytracer.hpp src/test_scene.hpp)
 add_executable(raytracer-gui src/gui.cpp ${SOURCE_CODE} ${IMGUI_SRC})
 target_link_libraries(raytracer-gui ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES})
 
