@@ -8,7 +8,71 @@
 struct RayTracer {
     Scene scene;
 
+    const int NUM_BOX_LIGHT_SAMPLE = 64;
+
     RayTracer(): scene() {}
+
+    struct FindNearestResult {
+        bool hit;
+        float distance;
+        const Primitive *primitive;
+    };
+    FindNearestResult find_nearest(const Ray &ray) const {
+        FindNearestResult res = {.hit = false, .distance = std::numeric_limits<float>::max(), .primitive = nullptr};
+        for (const Primitive *pr : scene.primitives) {
+            auto r = pr->intersect(ray);
+            if (r.hit != IntersectionResult::MISS && r.distance < res.distance) {
+                res.hit = true;
+                res.distance = r.distance;
+                res.primitive = pr;
+            }
+        }
+        return res;
+    }
+
+    struct CalcShadeResult {
+        float shade;
+        Vector3 light_direction;
+    };
+    float calc_shade_point_light(const Primitive *light, const Vector3 &light_diff, const Vector3& pi) const {
+        float dist_light = light_diff.length();
+        Vector3 L = light_diff.normalized();
+
+        Ray ray_shadow(pi + L * EPS, L);
+        FindNearestResult r = find_nearest(ray_shadow);
+        return r.primitive == light ? 1.f : .0f;
+    }
+    CalcShadeResult calc_shade(const Primitive *light, const Vector3 &pi) const {
+        if (const Sphere *ls = dynamic_cast<const Sphere*>(light)) {
+            Vector3 light_diff = ls->center - pi;
+            float shade = calc_shade_point_light(ls, light_diff, pi);
+            return {.shade = shade, .light_direction = light_diff.normalized()};
+        } else if (const Box *lb = dynamic_cast<const Box*>(light)) {
+            Vector3 L(0, 0, 0);
+            float shade = .0;
+            const int n = static_cast<int>(sqrt(NUM_BOX_LIGHT_SAMPLE));
+            assert(n*n == NUM_BOX_LIGHT_SAMPLE);
+            for (int i = 0; i < n; ++i)
+                for (int j = 0; j < n; ++j) {
+                    Vector3 ratio(randf() * (i+1)/n, randf(), randf() * (j+1)/n);
+                    Vector3 light_point = lb->aabb.pos + ratio * lb->aabb.size;
+                    Vector3 light_diff = light_point - pi;
+                    L += light_diff.normalized();
+                    shade += calc_shade_point_light(lb, light_diff, pi);
+                }
+            return {.shade = shade / NUM_BOX_LIGHT_SAMPLE, .light_direction = L / NUM_BOX_LIGHT_SAMPLE};
+            // FIXME: This assumes y is small
+//            for (int i = 0; i < NUM_BOX_LIGHT_SAMPLE; ++i) {
+//                Vector3 ratio(randf(), randf(), randf());
+//                Vector3 light_point = lb->aabb.pos + ratio * lb->aabb.size;
+//                Vector3 light_diff = light_point - pi;
+//                L += light_diff.normalized();
+//                shade += calc_shade_point_light(lb, light_diff, pi);
+//            }
+//            return {.shade = shade / NUM_BOX_LIGHT_SAMPLE, .light_direction = L / NUM_BOX_LIGHT_SAMPLE};
+        }
+        return {.shade = 0};
+    };
 
     struct RayTraceResult {
         bool hit;
@@ -16,7 +80,6 @@ struct RayTracer {
         Color color;
         const Primitive *primitive;
     };
-
     RayTraceResult ray_trace(const Ray& ray, float refract_index, int remain_depth) const {
         RayTraceResult res = {.hit = false, .distance = 0, .color = Color(0, 0, 0), .primitive = nullptr};
         if (!remain_depth) return res;
@@ -44,43 +107,31 @@ struct RayTracer {
         res.distance = dist;
         Vector3 pi = ray.origin + ray.direction * dist; // intersection point
         Vector3 N = res.primitive->get_normal(pi);
-        for (const Primitive *pr : scene.primitives) {
-            if (!pr->light) continue;
-            // TODO: light sources other than Sphere
-            const Sphere *light = dynamic_cast<const Sphere*>(pr);
-            assert(light);
-            Vector3 L = light->center - pi;
-            float dist_light = L.length();
-            L = L.normalized();
-
+        for (const Primitive *light : scene.primitives) {
             // shadow
-            float shade = 1.0f;
-            Ray ray_shadow(pi + L * EPS, L);
-            for (const Primitive *pr_shadow : scene.primitives) {
-                if (pr_shadow->light) continue;
-                IntersectionResult r = pr_shadow->intersect(ray_shadow);
-                if (r.hit != IntersectionResult::MISS && r.distance < dist_light) {
-                    shade = 0;
-                    break;
+            if (!light->light) continue;
+            CalcShadeResult res_shade = calc_shade(light, pi);
+            Vector3 L = res_shade.light_direction;
+            float shade = res_shade.shade;
+
+            if (shade > 0) {
+                // diffuse shading
+                float k_diffuse = res.primitive->material.k_diffuse;
+                if (k_diffuse > 0) {
+                    float dot = N.dot(L);
+                    if (dot > 0)
+                        res.color += dot * k_diffuse * shade * res.primitive->material.color * light->material.color;
                 }
-            }
 
-            // diffuse shading
-            float k_diffuse = res.primitive->material.k_diffuse;
-            if (k_diffuse > 0) {
-                float dot = N.dot(L);
-                if (dot > 0)
-                    res.color += dot * k_diffuse * shade * res.primitive->material.color * light->material.color;
-            }
-
-            // specular shading
-            float k_specular = res.primitive->material.k_specular;
-            if (k_specular > 0) {
-                Vector3 V = ray.direction;
-                Vector3 R = L - 2.f * L.dot(N) * N;
-                float dot = V.dot(R);
-                if (dot > 0)
-                    res.color += powf(dot, 20) * k_specular * shade * light->material.color;
+                // specular shading
+                float k_specular = res.primitive->material.k_specular;
+                if (k_specular > 0) {
+                    Vector3 V = ray.direction;
+                    Vector3 R = L - 2.f * L.dot(N) * N;
+                    float dot = V.dot(R);
+                    if (dot > 0)
+                        res.color += powf(dot, 20) * k_specular * shade * light->material.color;
+                }
             }
         }
 

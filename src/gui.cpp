@@ -96,6 +96,7 @@ int main(int argc, char** argv)
             .k_reflect = 0
     };
 
+    // ground plane
     Plane p0 = Plane(Vector3(0, 1, 0), 4.4f);
     p0.material = def_material;
     p0.material.k_reflect = 0.0f;

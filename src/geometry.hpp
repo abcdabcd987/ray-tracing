@@ -16,11 +16,15 @@ struct Vector3 {
     Vector3& operator+=(const Vector3 &v) { x += v.x, y += v.y, z += v.z; return *this; }
     Vector3& operator-=(const Vector3 &v) { x -= v.x, y -= v.y, z -= v.z; return *this; }
     Vector3& operator*=(const Vector3 &v) { x *= v.x, y *= v.y, z *= v.z; return *this; }
+    Vector3& operator/=(const Vector3 &v) { x /= v.x, y /= v.y, z /= v.z; return *this; }
     Vector3& operator*=(float k) { x *= k; y *= k; z *= k; return *this; }
+    Vector3& operator/=(float k) { x /= k; y /= k; z /= k; return *this; }
     friend Vector3 operator+(Vector3 u, const Vector3 &v) { return u += v; }
     friend Vector3 operator-(Vector3 u, const Vector3 &v) { return u -= v; }
     friend Vector3 operator*(Vector3 u, const Vector3 &v) { return u *= v; }
+    friend Vector3 operator/(Vector3 u, const Vector3 &v) { return u /= v; }
     friend Vector3 operator*(Vector3 u, float k) { return u *= k; }
+    friend Vector3 operator/(Vector3 u, float k) { return u /= k; }
     friend Vector3 expf(const Vector3& v) { return Vector3(std::expf(v.x), std::expf(v.y), std::expf(v.z)); }
     Vector3 operator-() const { return Vector3(-x, -y, -z); }
     float dot(const Vector3 &v) const { return x * v.x + y * v.y + z * v.z; }
@@ -32,6 +36,29 @@ struct Vector3 {
     }
 };
 typedef Vector3 Color;
+
+
+struct AABB {
+    Vector3 pos;
+    Vector3 size;
+
+    AABB(const Vector3 &pos_, const Vector3& size_): pos(pos_), size(size_) {}
+
+    bool intersect(const AABB& rhs) const {
+        Vector3 v1 = rhs.pos, v2 = rhs.pos + rhs.size;
+        Vector3 v3 = pos, v4 = pos + size;
+        return ((v4.x > v1.x) && (v3.x < v2.x) &&
+                (v4.y > v1.y) && (v3.y < v2.y) &&
+                (v4.z > v1.z) && (v3.z < v2.z));
+    }
+
+    bool contain(const Vector3 &a_Pos) {
+        Vector3 v1 = pos, v2 = pos + size;
+        return ((a_Pos.x > (v1.x - EPS)) && (a_Pos.x < (v2.x + EPS)) &&
+                (a_Pos.y > (v1.y - EPS)) && (a_Pos.y < (v2.y + EPS)) &&
+                (a_Pos.z > (v1.z - EPS)) && (a_Pos.z < (v2.z + EPS)));
+    }
+};
 
 
 struct Ray {
@@ -46,6 +73,7 @@ struct Material {
     Color color;
     float k_reflect;
     float k_diffuse;
+    float k_diffuse_reflect;
     float k_specular;
     float k_refract;
     float k_refract_index;
@@ -54,8 +82,8 @@ struct Material {
 
 
 struct IntersectionResult {
-    const enum HitType {MISS, HIT, INSIDE} hit;
-    const float distance;
+    enum HitType {MISS, HIT, INSIDE} hit;
+    float distance;
 };
 
 
@@ -117,6 +145,43 @@ struct Plane : public Primitive {
 };
 
 
+struct Box : public Primitive {
+    AABB aabb;
+
+    Box(const AABB &aabb_): Primitive(), aabb(aabb_) {}
+
+    IntersectionResult intersect(const Ray &ray) const override {
+        Vector3 d = ray.direction, o = ray.origin;
+        Vector3 v1 = aabb.pos, v2 = aabb.pos + aabb.size;
+        float dist[6] = {
+                d.x ? (v1.x - o.x) / d.x : 0,
+                d.x ? (v2.x - o.x) / d.x : 0,
+                d.y ? (v1.y - o.y) / d.y : 0,
+                d.y ? (v2.y - o.y) / d.y : 0,
+                d.z ? (v1.z - o.z) / d.z : 0,
+                d.z ? (v2.z - o.z) / d.z : 0,
+        };
+        IntersectionResult res = {.hit = IntersectionResult::MISS};
+        for (int i = 0; i < 6; ++i) {
+            if (!dist[i]) continue;
+            Vector3 ip = o + dist[i] * d;
+            if ((ip.x > (v1.x - EPS)) && (ip.x < (v2.x + EPS)) &&
+                (ip.y > (v1.y - EPS)) && (ip.y < (v2.y + EPS)) &&
+                (ip.z > (v1.z - EPS)) && (ip.z < (v2.z + EPS))) {
+                if (res.hit == IntersectionResult::MISS || res.distance > dist[i])
+                    res = {.hit = IntersectionResult::HIT, .distance = dist[i]};
+            }
+        }
+        return res;
+    }
+
+    Vector3 get_normal(const Vector3 &pos) const override {
+        assert(false);
+        return Vector3(0, 0, 0);
+    }
+};
+
+
 struct Scene {
     std::vector<Primitive*> primitives;
 };
@@ -126,4 +191,8 @@ inline void color_add_to_array(uint8_t *out, const Color &color) {
     out[0] = static_cast<uint8_t>(std::min(out[0] + color.r * 255.f, 255.f));
     out[1] = static_cast<uint8_t>(std::min(out[1] + color.g * 255.f, 255.f));
     out[2] = static_cast<uint8_t>(std::min(out[2] + color.b * 255.f, 255.f));
+}
+
+inline float randf() {
+    return rand() / static_cast<float>(RAND_MAX);
 }
