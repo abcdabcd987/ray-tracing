@@ -154,11 +154,9 @@ struct RayTracer {
                 Vector3 RN2 = RP.cross(RN1);
                 Color c(0, 0, 0);
                 for (int i = 0; i < config.num_diffuse_reflect_sample; ++i) {
-                    float xoff, yoff;
-                    do {
-                        xoff = randf() * k_diffuse_reflect;
-                        yoff = randf() * k_diffuse_reflect;
-                    } while (xoff * xoff + yoff * yoff > k_diffuse_reflect * k_diffuse_reflect);
+                    float len = randf() * k_diffuse_reflect;
+                    float angle = static_cast<float>(randf() * 2 * M_PI);
+                    float xoff = len * cosf(angle), yoff = len * sinf(angle);
                     Vector3 R = (RP + RN1 * xoff + RN2 * yoff * k_diffuse_reflect).normalized();
                     Ray ray_reflect(pi + R * EPS, R);
                     RayTraceResult r = ray_trace(ray_reflect, refract_index, depth + 1);
@@ -208,7 +206,8 @@ struct RayTracer {
         float dy = (wy2 - wy1) / height;
         Vector3 o(0, 0, -5);
         fprintf(stderr, "start rendering\n");
-        auto last = std::chrono::high_resolution_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
+        auto last = start;
         for (int y = 0; y < height; ++y) {
             const float sy = wy1 + dy * y;
             for (int x = 0; x < width; ++x) {
@@ -225,11 +224,11 @@ struct RayTracer {
                 long long ns = diff.count();
                 double ms = ns / 1e6;
                 if (ms > 50) {
-                    fprintf(stderr, "\rdone %d/%d", y * width + x + 1, width * height);
+                    fprintf(stderr, "\rrendered %d/%d pixels in %.3fs", y * width + x + 1, width * height, (now-start).count() / 1e9);
                     last = now;
                 }
             }
         }
-        fprintf(stderr, "\n");
+        fprintf(stderr, "\ndone\n");
     }
 };
