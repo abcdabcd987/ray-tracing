@@ -1,28 +1,38 @@
 #include <imgui.h>
-#include "imgui_impl_glfw.h"
-#include <GLFW/glfw3.h>
-
+#include "imgui_impl_sdl_gl3.h"
+#include <cstdio>
+#include <GL/gl3w.h>
+#include <SDL.h>
 #include <thread>
 #include <functional>
 #include "raytracer.hpp"
 #include "test_scene.hpp"
 
-static void error_callback(int error, const char* description)
-{
-    fprintf(stderr, "Error %d: %s\n", error, description);
-}
-
 int main(int argc, char** argv)
 {
+    // Setup SDL
+    if (SDL_Init(SDL_INIT_VIDEO|SDL_INIT_TIMER) != 0)
+    {
+        printf("Error: %s\n", SDL_GetError());
+        return -1;
+    }
+
     // Setup window
-    glfwSetErrorCallback(error_callback);
-    if (!glfwInit())
-        return 1;
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "ImGui OpenGL2 example", NULL, NULL);
-    glfwMakeContextCurrent(window);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_DisplayMode current;
+    SDL_GetCurrentDisplayMode(0, &current);
+    SDL_Window *window = SDL_CreateWindow("ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
+    SDL_GLContext glcontext = SDL_GL_CreateContext(window);
+    gl3wInit();
 
     // Setup ImGui binding
-    ImGui_ImplGlfw_Init(window, true);
+    ImGui_ImplSdlGL3_Init(window);
 
     // Load Fonts
     // (there is a default font, this is only if you want to change it. see extra_fonts/README.txt for more details)
@@ -57,20 +67,26 @@ int main(int argc, char** argv)
     auto start = std::chrono::high_resolution_clock::now();
     auto end = start;
     int ended = 0;
+    RayTracer::TraceConfig config;
+    config.num_worker = std::thread::hardware_concurrency();
     std::thread thread([&]{
-        RayTracer::TraceConfig config;
         tracer.render(data, render_width, render_height, config);
         save_ppm("/tmp/ray-tracing.ppm", data, width, height);
         ended = 1;
     });
 
     // Main loop
-    while (!glfwWindowShouldClose(window))
+    bool done = false;
+    while (!done)
     {
-        if (glfwGetWindowAttrib(window, GLFW_ICONIFIED))
-            glfwWaitEvents();
-        glfwPollEvents();
-        ImGui_ImplGlfw_NewFrame();
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSdlGL3_ProcessEvent(&event);
+            if (event.type == SDL_QUIT)
+                done = true;
+        }
+        ImGui_ImplSdlGL3_NewFrame(window);
 
         // 1. Show a simple window
         // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets appears in a window automatically called "Debug"
@@ -109,7 +125,10 @@ int main(int argc, char** argv)
             } else if (ended == 2) {
                 now = end;
             }
-            ImGui::Text("rendered %d/%d pixels in %.3fs", tracer.cnt_rendered, render_height * render_width, (now-start).count() / 1e9);
+            ImGui::Text("size: %d x %d", width, height);
+            ImGui::Text("render size: %d x %d", render_width, render_height);
+            ImGui::Text("workers: %d", config.num_worker);
+            ImGui::Text("rendered %d/%d pixels in %.3fs", tracer.cnt_rendered.load(), render_height * render_width, (now-start).count() / 1e9);
 
             glBindTexture(GL_TEXTURE_2D, tex);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
@@ -134,18 +153,18 @@ int main(int argc, char** argv)
         }
 
         // Rendering
-        int display_w, display_h;
-        glfwGetFramebufferSize(window, &display_w, &display_h);
-        glViewport(0, 0, display_w, display_h);
+        glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT);
         ImGui::Render();
-        glfwSwapBuffers(window);
+        SDL_GL_SwapWindow(window);
     }
 
     // Cleanup
-    ImGui_ImplGlfw_Shutdown();
-    glfwTerminate();
+    ImGui_ImplSdlGL3_Shutdown();
+    SDL_GL_DeleteContext(glcontext);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 
     thread.join();
 

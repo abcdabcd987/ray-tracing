@@ -4,23 +4,26 @@ set(CMAKE_CXX_STANDARD 11)
 
 include(FindPkgConfig)
 find_package(OpenGL REQUIRED)
-find_package(glfw3 REQUIRED)
-include_directories(${OPENGL_INCLUDE_DIR})
+find_package(SDL2 REQUIRED)
+include_directories(${SDL2_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR})
 
 set(IMGUI_SRC
         vendor/imgui/imgui.cpp
         vendor/imgui/imgui_demo.cpp
         vendor/imgui/imgui_draw.cpp
-        vendor/imgui/examples/opengl2_example/imgui_impl_glfw.cpp)
+        vendor/imgui/examples/libs/gl3w/GL/gl3w.c
+        vendor/imgui/examples/sdl_opengl3_example/imgui_impl_sdl_gl3.cpp)
 include_directories(
         vendor/imgui
         vendor/imgui/examples/libs/gl3w
-        vendor/imgui/examples/opengl2_example)
+        vendor/imgui/examples/sdl_opengl3_example)
+
+include_directories(vendor/CTPL)
 
 set(SOURCE_CODE
         src/geometry.hpp src/raytracer.hpp src/test_scene.hpp)
 add_executable(raytracer-gui src/gui.cpp ${SOURCE_CODE} ${IMGUI_SRC})
-target_link_libraries(raytracer-gui glfw ${OPENGL_LIBRARIES})
+target_link_libraries(raytracer-gui ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES})
 
 find_library(FRAMEWORK_CORE_FOUNDATION CoreFoundation)
 find_library(FRAMEWORK_OPENGL OpenGl)

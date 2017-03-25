@@ -9,6 +9,7 @@ int main(int argc, char** argv) {
     RayTracer tracer;
     add_scene1(tracer);
     RayTracer::TraceConfig config;
+    config.num_worker = std::thread::hardware_concurrency();
     tracer.render(data, width, height, config);
     save_ppm("/tmp/ray-tracing.ppm", data, width, height);
 }
