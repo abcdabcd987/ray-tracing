@@ -4,9 +4,154 @@
 #include <GL/gl3w.h>
 #include <SDL.h>
 #include <thread>
-#include <functional>
 #include "raytracer.hpp"
 #include "test_scene.hpp"
+
+int width, height, render_width, render_height, image_width, image_height;
+uint8_t *data;
+std::chrono::high_resolution_clock::time_point time_render_start, time_render_end;
+enum RenderStatus {WAIT_TO_RENDER, RENDERING, RENDERED, EXIT_RENDER} status;
+RayTracer::TraceConfig config;
+RayTracer tracer;
+GLuint tex;
+
+
+void show_image_window() {
+    ImGui::Begin("Image");
+    auto end = status == RENDERING ? std::chrono::high_resolution_clock::now() : time_render_end;
+    double sec = (end - time_render_start).count() / 1e9;
+    ImGui::Text("render size: %d x %d", image_width, image_height);
+    ImGui::Text("rendered %d/%d pixels in %.3fs", tracer.cnt_rendered.load(), image_width * image_height, sec);
+
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, image_width, image_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+
+    ImVec2 tex_screen_pos = ImGui::GetCursorScreenPos();
+    ImTextureID texid = reinterpret_cast<ImTextureID>(tex);
+    ImGui::Image(texid, ImVec2(width, height));
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        float focus_sz = 32.0f;
+        float focus_x = ImGui::GetMousePos().x - tex_screen_pos.x - focus_sz * 0.5f; if (focus_x < 0.0f) focus_x = 0.0f; else if (focus_x > width  - focus_sz) focus_x = width  - focus_sz;
+        float focus_y = ImGui::GetMousePos().y - tex_screen_pos.y - focus_sz * 0.5f; if (focus_y < 0.0f) focus_y = 0.0f; else if (focus_y > height - focus_sz) focus_y = height - focus_sz;
+        ImGui::Text("Min: (%.2f, %.2f)", focus_x, focus_y);
+        ImGui::Text("Max: (%.2f, %.2f)", focus_x + focus_sz, focus_y + focus_sz);
+        ImVec2 uv0 = ImVec2((focus_x) / width, (focus_y) / height);
+        ImVec2 uv1 = ImVec2((focus_x + focus_sz) / width, (focus_y + focus_sz) / height);
+        ImGui::Image(texid, ImVec2(128,128), uv0, uv1, ImColor(255,255,255,255), ImColor(255,255,255,128));
+        ImGui::EndTooltip();
+    }
+    ImGui::End();
+}
+
+
+void show_toolbox_info() {
+    ImGui::Text("GUI FPS: %.1f", ImGui::GetIO().Framerate);
+}
+
+
+void show_toolbox_render() {
+    int wh[] = {width, height};
+    ImGui::InputInt2("width x height", wh);
+    width = wh[0], height = wh[1];
+
+    int rwh[] = {render_width, render_height};
+    ImGui::InputInt2("render_width x render_height", rwh);
+    render_width = rwh[0], render_height = rwh[1];
+
+    ImGui::SliderInt("num_trace_depth", &config.num_trace_depth, 1, 10);
+    ImGui::SliderInt("num_box_light_sample", &config.num_box_light_sample, 1, 256);
+    ImGui::SliderInt("num_diffuse_reflect_sample", &config.num_diffuse_reflect_sample, 1, 128);
+    ImGui::SliderInt("workers", &config.num_worker, 1, std::thread::hardware_concurrency());
+
+    if (ImGui::Button("render")) status = WAIT_TO_RENDER;
+}
+
+
+void show_toolbox_scene() {
+    static char buf[100];
+    for (size_t i = 0; i < tracer.scene.primitives.size(); ++i) {
+        Primitive *p = tracer.scene.primitives[i];
+        bool open;
+        if (Sphere *sphere = dynamic_cast<Sphere*>(p)) {
+            sprintf(buf, "%zu: Sphere %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            if ((open = ImGui::TreeNode(buf))) {
+                ImGui::DragFloat3("center", sphere->center.data, 0.01f);
+                ImGui::DragFloat("radius", &sphere->radius, 0.001f);
+            }
+        } else if (Box *box = dynamic_cast<Box*>(p)) {
+            sprintf(buf, "%zu: Box %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            if ((open = ImGui::TreeNode(buf))) {
+                ImGui::DragFloat3("pos", box->aabb.pos.data, 0.01f);
+                ImGui::DragFloat3("size", box->aabb.size.data, 0.01f);
+            }
+        } else if (Triangle *triangle = dynamic_cast<Triangle*>(p)) {
+            sprintf(buf, "%zu: Triangle %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            if ((open = ImGui::TreeNode(buf))) {
+                Vector3 v1 = triangle->v, v2 = v1 + triangle->e1, v3 = v1 + triangle->e2;
+                ImGui::DragFloat3("vertex 1", v1.data, 0.01f);
+                ImGui::DragFloat3("vertex 2", v2.data, 0.01f);
+                ImGui::DragFloat3("vertex 3", v3.data, 0.01f);
+                triangle->set_vertices(v1, v2, v3);
+            }
+        } else if (Plane *plane = dynamic_cast<Plane*>(p)) {
+            sprintf(buf, "%zu: Plane %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            if ((open = ImGui::TreeNode(buf))) {
+                ImGui::DragFloat3("normal", plane->normal.data, 0.001f);
+                ImGui::DragFloat("distance", &plane->distance, 0.01f);
+            }
+        } else {
+            sprintf(buf, "%zu: Primitive %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            open = ImGui::TreeNode(buf);
+        }
+        if (open) {
+            bool light = p->light;
+            ImGui::Checkbox("light", &light);
+            if (light != p->light) {
+                auto &lights = tracer.scene.lights;
+                if (p->light) lights.erase(std::remove(lights.begin(), lights.end(), p));
+                else lights.emplace_back(p);
+                p->light = light;
+            }
+            ImGui::ColorEdit3("color", p->material.color.data);
+            ImGui::SliderFloat("k_reflect", &p->material.k_reflect, 0, 1);
+            ImGui::SliderFloat("k_diffuse", &p->material.k_diffuse, 0, 1);
+            ImGui::SliderFloat("k_diffuse_reflect", &p->material.k_diffuse_reflect, 0, 1);
+            ImGui::SliderFloat("k_specular", &p->material.k_specular, 0, 1);
+            ImGui::SliderFloat("k_refract", &p->material.k_refract, 0, 1);
+            ImGui::SliderFloat("k_refract_index", &p->material.k_refract_index, 0, 1);
+            ImGui::SliderFloat("k_ambient", &p->material.k_ambient, 0, 1);
+            ImGui::TreePop();
+        }
+    }
+    ImGui::Separator();
+
+    if (ImGui::Button("new Sphere")) {
+        Sphere *sphere = new Sphere(Vector3(0, 0, 0), 0);
+        tracer.scene.add(sphere);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("new Box")) {
+        Box *box = new Box(AABB(Vector3(0, 0, 0), Vector3(0, 0, 0)));
+        tracer.scene.add(box);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("new Triangle")) {
+        Triangle *triangle = new Triangle(Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(0, 0, 0));
+        tracer.scene.add(triangle);
+    }
+}
+
+
+void show_toolbox_window() {
+    ImGui::Begin("Toolbox");
+    show_toolbox_info();
+    if (ImGui::CollapsingHeader("Render")) show_toolbox_render();
+    if (ImGui::CollapsingHeader("Scene")) show_toolbox_scene();
+    ImGui::End();
+}
+
 
 int main(int argc, char** argv)
 {
@@ -45,16 +190,14 @@ int main(int argc, char** argv)
     //io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
 
     bool show_test_window = true;
-    bool show_another_window = false;
     ImVec4 clear_color = ImColor(114, 144, 154).Value;
 
     const auto scale = ImGui::GetIO().DisplayFramebufferScale;
-    const int width = 400, height = 300;
-    const int render_width = static_cast<int>(width * scale.x);
-    const int render_height = static_cast<int>(height * scale.y);
-    uint8_t data[render_width * render_height * 3];
-    memset(data, 0, sizeof(data));
-    GLuint tex;
+    width = 800, height = 600;
+    render_width = static_cast<int>(width * scale.x);
+    render_height = static_cast<int>(height * scale.y);
+    data = new uint8_t[render_width * render_height * 3];
+    memset(data, 0, sizeof(*data) * render_width * render_height * 3);
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -62,17 +205,33 @@ int main(int argc, char** argv)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
 
-    RayTracer tracer;
     add_scene1(tracer);
-    auto start = std::chrono::high_resolution_clock::now();
-    auto end = start;
-    int ended = 0;
-    RayTracer::TraceConfig config;
+    config.num_trace_depth = 3;
+    config.num_box_light_sample = 49;
+    config.num_diffuse_reflect_sample = 32;
     config.num_worker = std::thread::hardware_concurrency();
-    std::thread thread([&]{
-        tracer.render(data, render_width, render_height, config);
-        save_ppm("/tmp/ray-tracing.ppm", data, width, height);
-        ended = 1;
+
+    std::thread render_thread([&]{
+        while (status != EXIT_RENDER) {
+            if (status == WAIT_TO_RENDER) {
+                status = RENDERING;
+                if (render_width != image_width || render_height != image_height) {
+                    uint8_t *olddata = data;
+                    data = new uint8_t[render_width * render_height * 3];
+                    image_width = render_width;
+                    image_height = render_height;
+                    delete [] olddata;
+                }
+                time_render_start = std::chrono::high_resolution_clock::now();
+                bool success = tracer.render(data, image_width, image_height, config);
+                time_render_end = std::chrono::high_resolution_clock::now();
+                if (success)
+                    save_ppm("/tmp/ray-tracing.ppm", data, width, height);
+                status = RENDERED;
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
     });
 
     // Main loop
@@ -88,27 +247,6 @@ int main(int argc, char** argv)
         }
         ImGui_ImplSdlGL3_NewFrame(window);
 
-        // 1. Show a simple window
-        // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets appears in a window automatically called "Debug"
-        {
-            static float f = 0.0f;
-            ImGui::Text("Hello, world!");
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-            ImGui::ColorEdit3("clear color", (float*)&clear_color);
-            if (ImGui::Button("Test Window")) show_test_window ^= 1;
-            if (ImGui::Button("Another Window")) show_another_window ^= 1;
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        }
-
-        // 2. Show another simple window, this time using an explicit Begin/End pair
-        if (show_another_window)
-        {
-            ImGui::SetNextWindowSize(ImVec2(200,100), ImGuiSetCond_FirstUseEver);
-            ImGui::Begin("Another Window", &show_another_window);
-            ImGui::Text("Hello");
-            ImGui::End();
-        }
-
         // 3. Show the ImGui test window. Most of the sample code is in ImGui::ShowTestWindow()
         if (show_test_window)
         {
@@ -116,41 +254,8 @@ int main(int argc, char** argv)
             ImGui::ShowTestWindow(&show_test_window);
         }
 
-        {
-            ImGui::Begin("Image", &show_another_window);
-            auto now = std::chrono::high_resolution_clock::now();
-            if (ended == 1) {
-                ended = 2;
-                end = now;
-            } else if (ended == 2) {
-                now = end;
-            }
-            ImGui::Text("size: %d x %d", width, height);
-            ImGui::Text("render size: %d x %d", render_width, render_height);
-            ImGui::Text("workers: %d", config.num_worker);
-            ImGui::Text("rendered %d/%d pixels in %.3fs", tracer.cnt_rendered.load(), render_height * render_width, (now-start).count() / 1e9);
-
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-
-            ImVec2 tex_screen_pos = ImGui::GetCursorScreenPos();
-            ImTextureID texid = reinterpret_cast<ImTextureID>(tex);
-            ImGui::Image(texid, ImVec2(width, height));
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::BeginTooltip();
-                float focus_sz = 32.0f;
-                float focus_x = ImGui::GetMousePos().x - tex_screen_pos.x - focus_sz * 0.5f; if (focus_x < 0.0f) focus_x = 0.0f; else if (focus_x > width  - focus_sz) focus_x = width  - focus_sz;
-                float focus_y = ImGui::GetMousePos().y - tex_screen_pos.y - focus_sz * 0.5f; if (focus_y < 0.0f) focus_y = 0.0f; else if (focus_y > height - focus_sz) focus_y = height - focus_sz;
-                ImGui::Text("Min: (%.2f, %.2f)", focus_x, focus_y);
-                ImGui::Text("Max: (%.2f, %.2f)", focus_x + focus_sz, focus_y + focus_sz);
-                ImVec2 uv0 = ImVec2((focus_x) / width, (focus_y) / height);
-                ImVec2 uv1 = ImVec2((focus_x + focus_sz) / width, (focus_y + focus_sz) / height);
-                ImGui::Image(texid, ImVec2(128,128), uv0, uv1, ImColor(255,255,255,255), ImColor(255,255,255,128));
-                ImGui::EndTooltip();
-            }
-            ImGui::End();
-        }
+        show_image_window();
+        show_toolbox_window();
 
         // Rendering
         glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);
@@ -166,7 +271,9 @@ int main(int argc, char** argv)
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    thread.join();
+    status = EXIT_RENDER;
+    render_thread.join();
+    delete [] data;
 
     return 0;
 }

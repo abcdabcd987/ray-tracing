@@ -4,16 +4,17 @@
 #include <limits>
 #include <vector>
 #include <thread>
+#include <tuple>
 #include <cstdint>
 #include <cassert>
-#include "ctpl_stl.h"
+#include "concurrentqueue.h"
 #include "geometry.hpp"
 
 struct RayTracer {
     struct TraceConfig {
-        int num_trace_depth = 6;
-        int num_box_light_sample = 256;
-        int num_diffuse_reflect_sample = 128;
+        int num_trace_depth = 3;
+        int num_box_light_sample = 49;
+        int num_diffuse_reflect_sample = 32;
         int num_worker = 4;
 
         TraceConfig() {}
@@ -21,6 +22,8 @@ struct RayTracer {
 
     Scene scene;
     std::atomic<int> cnt_rendered;
+    std::atomic<bool> flag_to_stop;
+    std::atomic<bool> flag_stopped;
     RayTracer(): scene() {}
 
     struct FindNearestResult {
@@ -108,16 +111,16 @@ struct RayTracer {
         if (!res.primitive) return res;
 
         // if light
-        if (res.primitive->light) return {.hit = true, .distance = dist, .color = Color(1.f, 1.f, 1.f), .primitive = res.primitive};
+        if (res.primitive->light)
+            return {.hit = true, .distance = dist, .color = res.primitive->material.color, .primitive = res.primitive};
 
         // if normal object
         res.hit = true;
         res.distance = dist;
         Vector3 pi = ray.origin + ray.direction * dist; // intersection point
         Vector3 N = res.primitive->get_normal(pi);
-        for (const Primitive *light : scene.primitives) {
+        for (const Primitive *light : scene.lights) {
             // shadow
-            if (!light->light) continue;
             CalcShadeResult res_shade = calc_shade(light, pi, config);
             Vector3 L = res_shade.light_direction;
             float shade = res_shade.shade;
@@ -204,40 +207,70 @@ struct RayTracer {
     }
 
     // TODO: camera position, screen position, z direction
-    void render(uint8_t *out, int width, int height, const TraceConfig &config) {
-        cnt_rendered.store(0);
+    bool render(uint8_t *out, int width, int height, const TraceConfig &config) {
+        flag_to_stop = false;
+        flag_stopped = false;
+        cnt_rendered = 0;
         float wx1 = -4, wx2 = 4, wy1 = 3, wy2 = -3;
         float dx = (wx2 - wx1) / width;
         float dy = (wy2 - wy1) / height;
         Vector3 o(0, 0, -5);
 
-        auto func = [&](int thread_id, int x, int y) {
-            const float sy = wy1 + dy * y;
-            const float sx = wx1 + dx * x;
-            Ray ray(o, Vector3(sx, sy, 0) - o);
-            RayTraceResult res = ray_trace(ray, 1.f, 0, config);
-            if (res.hit) {
-                const int idx = (y * width + x) * 3;
-                color_add_to_array(&out[idx], res.color);
+        moodycamel::ConcurrentQueue<std::pair<int, int>> q;
+        auto func = [&] {
+            for (std::pair<int, int> item; ;) {
+                q.try_dequeue(item);
+                int x = item.first, y = item.second;
+                if (x == -1) return;
+
+                const float sy = wy1 + dy * y;
+                const float sx = wx1 + dx * x;
+                Ray ray(o, Vector3(sx, sy, 0) - o);
+                RayTraceResult res = ray_trace(ray, 1.f, 1, config);
+                if (res.hit) {
+                    const int idx = (y * width + x) * 3;
+                    color_save_to_array(&out[idx], res.color);
+                }
+                ++cnt_rendered;
             }
-            ++cnt_rendered;
         };
 
-        fprintf(stderr, "start rendering using %d workers\n", config.num_worker);
         auto start = std::chrono::high_resolution_clock::now();
-        ctpl::thread_pool pool(config.num_worker);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x)
-                pool.push(func, x, y);
+                q.enqueue(std::make_tuple(x, y));
+
+        std::vector<std::thread> workers;
+        for (int i = 0; i < config.num_worker; ++i) workers.emplace_back(func);
+        for (int i = 0; i < config.num_worker; ++i) q.enqueue(std::make_tuple(-1, -1));
         const int total = width * height;
         for (;;) {
             int cnt = cnt_rendered.load();
             auto now = std::chrono::high_resolution_clock::now();
             auto sec = (now - start).count() / 1e9;
-            fprintf(stderr, "\rrendered %d/%d pixels in %.3fs", cnt, total, sec);
+            fprintf(stderr, "\rrendered %d/%d pixels using %d workers in %.3fs...", cnt, total, config.num_worker, sec);
             if (cnt == total) break;
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+            // if force stop
+            if (flag_to_stop) {
+                fprintf(stderr, "got stop flag..."); fflush(stderr);
+                std::pair<int, int> ignore;
+                while (q.try_dequeue(ignore));
+                for (int i = 0; i < config.num_worker; ++i) q.enqueue(std::make_tuple(-1, -1));
+                for (auto &worker : workers) worker.join();
+                fprintf(stderr, "stopped\n");
+                flag_stopped = true;
+                return false;
+            }
         }
-        fprintf(stderr, "\ndone\n");
+        for (auto &worker : workers) worker.join();
+        fprintf(stderr, "done\n");
+        flag_stopped = true;
+        return true;
+    }
+
+    void stop() {
+        flag_to_stop = true;
     }
 };

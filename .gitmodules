@@ -1,6 +1,6 @@
 [submodule "vendor/imgui"]
 	path = vendor/imgui
 	url = https://github.com/ocornut/imgui.git
-[submodule "vendor/CTPL"]
-	path = vendor/CTPL
-	url = https://github.com/vit-vit/CTPL.git
+[submodule "vendor/concurrentqueue"]
+	path = vendor/concurrentqueue
+	url = https://github.com/cameron314/concurrentqueue.git

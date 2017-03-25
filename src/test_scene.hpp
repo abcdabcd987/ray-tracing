@@ -50,14 +50,14 @@ void add_scene1(RayTracer &tracer) {
 #if 1
     // area light
     Primitive *p4 = new Box(AABB(Vector3(-1, 5, 4), Vector3( 2, 0.1f, 2)));
+    p4->light = true;
     p4->material = def_material;
-    p4->light = 1;
     p4->material.color = Color(1, 1, 1);
 #else
     // light source 1
     Primitive *p4 = new Sphere(Vector3(0, 5, 5), 0.1f);
+    p4->light = true;
     p4->material = def_material;
-    p4->light = 1;
     p4->material.color = Color(1, 1, 1);
 #endif
     // back plane
@@ -76,11 +76,11 @@ void add_scene1(RayTracer &tracer) {
     p6->material.color = Color(0.4f, 0.3f, 0.3f);
 
 
-    tracer.scene.primitives.emplace_back(p0);
-    tracer.scene.primitives.emplace_back(p1);
-    tracer.scene.primitives.emplace_back(p2);
-    tracer.scene.primitives.emplace_back(p3);
-    tracer.scene.primitives.emplace_back(p4);
-    tracer.scene.primitives.emplace_back(p5);
-    tracer.scene.primitives.emplace_back(p6);
+    tracer.scene.add(p0);
+    tracer.scene.add(p1);
+    tracer.scene.add(p2);
+    tracer.scene.add(p3);
+    tracer.scene.add(p4);
+    tracer.scene.add(p5);
+    tracer.scene.add(p6);
 }

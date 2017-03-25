@@ -9,6 +9,7 @@ struct Vector3 {
     union {
         struct { float x, y, z; };
         struct { float r, g, b; };
+        float data[3];
     };
     Vector3() : x(float(0)), y(float(0)), z(float(0)) {}
     Vector3(float xx) : x(xx), y(xx), z(xx) {}
@@ -89,9 +90,9 @@ struct IntersectionResult {
 
 
 struct Primitive {
+    bool light;
     Material material;
-    float light;
-    Primitive(): light(.0) {}
+    Primitive(): light(false), material() {}
     virtual IntersectionResult intersect(const Ray& ray) const = 0;
     virtual Vector3 get_normal(const Vector3& pos) const = 0;
     virtual Color get_color(const Vector3 &pos) const { return material.color; }
@@ -121,6 +122,45 @@ struct Sphere : public Primitive {
 
     Vector3 get_normal(const Vector3& pos) const override {
         return (pos - center).normalized();
+    }
+};
+
+
+struct Triangle : public Primitive {
+    Vector3 v, e1, e2;
+    Vector3 normal;
+
+    Triangle(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2)
+            : Primitive(), v(v0), e1(v1-v0), e2(v2-v0), normal(e1.cross(e2))
+    { }
+
+    void set_vertices(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2) {
+        v = v0;
+        e1 = v1 - v0;
+        e2 = v2 - v0;
+        normal = e1.cross(e2);
+    }
+
+    IntersectionResult intersect(const Ray &ray) const override {
+        // see https://github.com/ppwwyyxx/Ray-Tracing-Engine/blob/master/src/renderable/face.cc
+        IntersectionResult res = {.hit = IntersectionResult::MISS};
+        float dot = ray.direction.dot(normal);
+        if (fabsf(dot) < EPS) return res;
+        Vector3 line = v - ray.origin;
+        Vector3 line_r = ray.direction.cross(line);
+        res.distance = line.dot(normal) / dot;
+        if (res.distance < 0) return res;
+
+        float gx = -line_r.dot(e2) / dot;
+        if (gx < -EPS or gx > 1 + EPS) return res;
+        float gy = line_r.dot(e1) / dot;
+        if (gy < -EPS or gx + gy > 1 + EPS) return res;
+        res.hit = IntersectionResult::HIT;
+        return res;
+    }
+
+    Vector3 get_normal(const Vector3 &pos) const override {
+        return normal;
     }
 };
 
@@ -185,13 +225,19 @@ struct Box : public Primitive {
 
 struct Scene {
     std::vector<Primitive*> primitives;
+    std::vector<Primitive*> lights;
+
+    void add(Primitive *p) {
+        primitives.emplace_back(p);
+        if (p->light) lights.emplace_back(p);
+    }
 };
 
 
-inline void color_add_to_array(uint8_t *out, const Color &color) {
-    out[0] = static_cast<uint8_t>(std::min(out[0] + color.r * 255.f, 255.f));
-    out[1] = static_cast<uint8_t>(std::min(out[1] + color.g * 255.f, 255.f));
-    out[2] = static_cast<uint8_t>(std::min(out[2] + color.b * 255.f, 255.f));
+inline void color_save_to_array(uint8_t *out, const Color &color) {
+    out[0] = static_cast<uint8_t>(std::min(color.r * 255.f, 255.f));
+    out[1] = static_cast<uint8_t>(std::min(color.g * 255.f, 255.f));
+    out[2] = static_cast<uint8_t>(std::min(color.b * 255.f, 255.f));
 }
 
 inline float randf() {

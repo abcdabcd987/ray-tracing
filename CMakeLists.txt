@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.6)
 project(ray_tracing)
 set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_FLAGS "-O3")
 
 include(FindPkgConfig)
 find_package(OpenGL REQUIRED)
@@ -18,7 +19,7 @@ include_directories(
         vendor/imgui/examples/libs/gl3w
         vendor/imgui/examples/sdl_opengl3_example)
 
-include_directories(vendor/CTPL)
+include_directories(vendor/concurrentqueue)
 
 set(SOURCE_CODE
         src/geometry.hpp src/raytracer.hpp src/test_scene.hpp)
