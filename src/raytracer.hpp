@@ -27,16 +27,16 @@ struct RayTracer {
     RayTracer(): scene() {}
 
     struct FindNearestResult {
-        bool hit;
+        IntersectionResult::HitType hit;
         float distance;
         const Primitive *primitive;
     };
     FindNearestResult find_nearest(const Ray &ray) const {
-        FindNearestResult res = {.hit = false, .distance = std::numeric_limits<float>::max(), .primitive = nullptr};
+        FindNearestResult res = {.hit = IntersectionResult::MISS, .distance = std::numeric_limits<float>::max(), .primitive = nullptr};
         for (const Primitive *pr : scene.primitives) {
             auto r = pr->intersect(ray);
-            if (r.hit != IntersectionResult::MISS && r.distance < res.distance) {
-                res.hit = true;
+            if (r.hit != IntersectionResult::MISS && r.distance < res.distance && r.distance > 0) {
+                res.hit = r.hit;
                 res.distance = r.distance;
                 res.primitive = pr;
             }
@@ -62,6 +62,7 @@ struct RayTracer {
         } else if (const Box *lb = dynamic_cast<const Box*>(light)) {
             Vector3 L(0, 0, 0);
             float shade = .0;
+            // FIXME: This assumes y is small
             const int n = static_cast<int>(sqrt(config.num_box_light_sample));
             for (int i = 0, k = 0; i < n; ++i)
                 for (int j = 0; j < n && k < config.num_box_light_sample; ++j, ++k) {
@@ -72,15 +73,6 @@ struct RayTracer {
                     shade += calc_shade_point_light(lb, light_diff, pi);
                 }
             return {.shade = shade / config.num_box_light_sample, .light_direction = L / config.num_box_light_sample};
-            // FIXME: This assumes y is small
-//            for (int i = 0; i < NUM_BOX_LIGHT_SAMPLE; ++i) {
-//                Vector3 ratio(randf(), randf(), randf());
-//                Vector3 light_point = lb->aabb.pos + ratio * lb->aabb.size;
-//                Vector3 light_diff = light_point - pi;
-//                L += light_diff.normalized();
-//                shade += calc_shade_point_light(lb, light_diff, pi);
-//            }
-//            return {.shade = shade / NUM_BOX_LIGHT_SAMPLE, .light_direction = L / NUM_BOX_LIGHT_SAMPLE};
         }
         return {.shade = 0};
     };
@@ -96,28 +88,18 @@ struct RayTracer {
         if (depth > config.num_trace_depth) return res;
 
         // find the nearest intersection
-        float dist = std::numeric_limits<float>::max();
-        IntersectionResult::HitType hit_type = IntersectionResult::MISS;
-        for (const Primitive *pr : scene.primitives) {
-            auto r = pr->intersect(ray);
-            if (r.hit != IntersectionResult::MISS && r.distance < dist) {
-                dist = r.distance;
-                res.primitive = pr;
-                hit_type = r.hit;
-            }
-        }
-
-        // if no intersection
-        if (!res.primitive) return res;
+        FindNearestResult res_nearest = find_nearest(ray);
+        if (res_nearest.hit == IntersectionResult::MISS) return res;
+        res.hit = true;
+        res.primitive = res_nearest.primitive;
+        res.distance = res_nearest.distance;
 
         // if light
         if (res.primitive->light)
-            return {.hit = true, .distance = dist, .color = res.primitive->material.color, .primitive = res.primitive};
+            return {.hit = true, .distance = res.distance, .color = res.primitive->material.color, .primitive = res.primitive};
 
         // if normal object
-        res.hit = true;
-        res.distance = dist;
-        Vector3 pi = ray.origin + ray.direction * dist; // intersection point
+        Vector3 pi = ray.origin + ray.direction * res.distance; // intersection point
         Vector3 N = res.primitive->get_normal(pi);
         for (const Primitive *light : scene.lights) {
             // shadow
@@ -137,9 +119,8 @@ struct RayTracer {
                 // specular shading
                 float k_specular = res.primitive->material.k_specular;
                 if (k_specular > 0) {
-                    Vector3 V = ray.direction;
                     Vector3 R = L - 2.f * L.dot(N) * N;
-                    float dot = V.dot(R);
+                    float dot = ray.direction.dot(R);
                     if (dot > 0)
                         res.color += powf(dot, 20) * k_specular * shade * light->material.color;
                 }
@@ -150,7 +131,7 @@ struct RayTracer {
         float k_reflect = res.primitive->material.k_reflect;
         if (k_reflect > 0) {
             float k_diffuse_reflect = res.primitive->material.k_diffuse_reflect;
-            if (k_diffuse_reflect > 0 && depth < 2) {
+            if (k_diffuse_reflect > 0 && depth <= 1) {
                 // diffuse reflection: only primary ray
                 Vector3 RP = ray.direction - 2.f * ray.direction.dot(N) * N;
                 Vector3 RN1 = Vector3(RP.z, RP.y, -RP.x);
@@ -186,7 +167,7 @@ struct RayTracer {
         if (k_refract > 0) {
             float k_refract_index = res.primitive->material.k_refract_index;
             float n = refract_index / k_refract_index;
-            Vector3 Nd = hit_type == IntersectionResult::INSIDE ? -N : N;
+            Vector3 Nd = res_nearest.hit == IntersectionResult::INSIDE ? -N : N;
             float cosI = -Nd.dot(ray.direction);
             float cosT2 = 1.f - n * n * (1.f - cosI * cosI);
             if (cosT2 > 0) {
@@ -214,7 +195,7 @@ struct RayTracer {
         float wx1 = -4, wx2 = 4, wy1 = 3, wy2 = -3;
         float dx = (wx2 - wx1) / width;
         float dy = (wy2 - wy1) / height;
-        Vector3 o(0, 0, -5);
+        Vector3 o(0, 0, -6);
 
         moodycamel::ConcurrentQueue<std::pair<int, int>> q;
         auto func = [&] {
@@ -225,24 +206,26 @@ struct RayTracer {
 
                 const float sy = wy1 + dy * y;
                 const float sx = wx1 + dx * x;
-                Ray ray(o, Vector3(sx, sy, 0) - o);
+                Ray ray(o, Vector3(sx, sy, -2) - o);
                 RayTraceResult res = ray_trace(ray, 1.f, 1, config);
-                if (res.hit) {
-                    const int idx = (y * width + x) * 3;
-                    color_save_to_array(&out[idx], res.color);
-                }
+                Color color = res.hit ? res.color : Color(0, 0, 0);
+                const int idx = (y * width + x) * 3;
+                color_save_to_array(&out[idx], res.color);
                 ++cnt_rendered;
             }
         };
 
         auto start = std::chrono::high_resolution_clock::now();
+        std::vector<std::pair<int, int>> xys;
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x)
-                q.enqueue(std::make_tuple(x, y));
+                xys.emplace_back(x, y);
+        std::random_shuffle(xys.begin(), xys.end());
+        for (const auto &xy : xys) q.enqueue(xy);
 
         std::vector<std::thread> workers;
         for (int i = 0; i < config.num_worker; ++i) workers.emplace_back(func);
-        for (int i = 0; i < config.num_worker; ++i) q.enqueue(std::make_tuple(-1, -1));
+        for (int i = 0; i < config.num_worker; ++i) q.enqueue(std::make_pair(-1, -1));
         const int total = width * height;
         for (;;) {
             int cnt = cnt_rendered.load();

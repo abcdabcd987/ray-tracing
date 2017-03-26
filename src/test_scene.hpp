@@ -84,3 +84,90 @@ void add_scene1(RayTracer &tracer) {
     tracer.scene.add(p5);
     tracer.scene.add(p6);
 }
+
+void add_scene2(RayTracer &tracer) {
+    Material sphere_material = {
+            .color = Color(.7f, .8f, .9f),
+            .k_specular = 0.1f,
+            .k_ambient = 0,
+            .k_refract_index = 1.f,
+            .k_refract = 0.05f,
+            .k_diffuse = 0.9f,
+            .k_reflect = 0.2f,
+            .k_diffuse_reflect = 0.3f,
+    };
+    Material plane_material = {
+            .color = Color(.4f, .3f, .3f),
+            .k_specular = .8f,
+            .k_ambient = 0,
+            .k_refract_index = 1.f,
+            .k_refract = 0,
+            .k_diffuse = 1.f,
+            .k_reflect = 0,
+            .k_diffuse_reflect = 0.f,
+    };
+    Material light_material = {
+            .color = Color(1, 1, 1),
+            .k_specular = 0.f,
+            .k_ambient = 0,
+            .k_refract_index = 1.f,
+            .k_refract = 1.f,
+            .k_diffuse = 1.f,
+            .k_reflect = 0.f,
+            .k_diffuse_reflect = 0.f,
+    };
+
+    Primitive *p;
+
+//    for (int i = -1; i <= 1; ++i)
+//        for (int j = -1; j <= 1; ++j) {
+//            p = new Sphere(Vector3(0.2f * i, 2.f, -3.f + 0.2f * j), .1f);
+//            p->light = true;
+//            p->material = light_material;
+//            p->material.color = Color(1, 1, 1) / 9.f;
+//            tracer.scene.add(p);
+//        }
+//    p = new Box(AABB(Vector3(-1, 2, -2), Vector3(2, 0.1f, 2)));
+//    p->light = true;
+//    p->material = light_material;
+//    p->material.color = Color(1, 1, 1);
+//    tracer.scene.add(p);
+    p = new Sphere(Vector3(-2, 2, -3), .1f);
+    p->light = true;
+    p->material = light_material;
+    p->material.color = Color(1, 1, 1);
+    tracer.scene.add(p);
+    p = new Sphere(Vector3(2, 2, -3), .1f);
+    p->light = true;
+    p->material = light_material;
+    p->material.color = Color(1, 1, 1);
+    tracer.scene.add(p);
+
+    p = new Plane(Vector3(0, 1, 0), 4.4f);
+    p->material = plane_material;
+    p->material.color = Color(.4f, .3f, .3f);
+    tracer.scene.add(p);
+
+    p = new Plane(Vector3(0, -1, 0), 4.4f);
+    p->material = plane_material;
+    p->material.color = Color(.6f, .0f, .0f);
+    tracer.scene.add(p);
+
+    p = new Plane(Vector3(-1, 0, 0), 4.4f);
+    p->material = plane_material;
+    p->material.color = Color(.0f, .6f, .0f);
+    tracer.scene.add(p);
+
+    p = new Plane(Vector3(1, 0, 0), 4.4f);
+    p->material = plane_material;
+    p->material.color = Color(.0f, .0f, .6f);
+    tracer.scene.add(p);
+
+    p = new Plane(Vector3(0, 0, -1), 4.4f);
+    p->material = plane_material;
+    p->material.color = Color(.7f, .7f, .3f);
+    tracer.scene.add(p);
+
+    Body *body = tracer.scene.load_obj("../models/teapot.obj");
+    body->set_material(sphere_material);
+}

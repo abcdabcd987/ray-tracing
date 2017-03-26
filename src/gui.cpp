@@ -66,6 +66,8 @@ void show_toolbox_render() {
     ImGui::SliderInt("workers", &config.num_worker, 1, std::thread::hardware_concurrency());
 
     if (ImGui::Button("render")) status = WAIT_TO_RENDER;
+    ImGui::SameLine();
+    if (ImGui::Button("stop")) tracer.stop();
 }
 
 
@@ -89,11 +91,11 @@ void show_toolbox_scene() {
         } else if (Triangle *triangle = dynamic_cast<Triangle*>(p)) {
             sprintf(buf, "%zu: Triangle %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
             if ((open = ImGui::TreeNode(buf))) {
-                Vector3 v1 = triangle->v, v2 = v1 + triangle->e1, v3 = v1 + triangle->e2;
+                Vector3 v0 = triangle->v0, v1 = triangle->v1, v2 = triangle->v2;
+                ImGui::DragFloat3("vertex 0", v0.data, 0.01f);
                 ImGui::DragFloat3("vertex 1", v1.data, 0.01f);
                 ImGui::DragFloat3("vertex 2", v2.data, 0.01f);
-                ImGui::DragFloat3("vertex 3", v3.data, 0.01f);
-                triangle->set_vertices(v1, v2, v3);
+                triangle->set_vertices(v0, v1, v2);
             }
         } else if (Plane *plane = dynamic_cast<Plane*>(p)) {
             sprintf(buf, "%zu: Plane %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
@@ -137,6 +139,11 @@ void show_toolbox_scene() {
         tracer.scene.add(box);
     }
     ImGui::SameLine();
+    if (ImGui::Button("new Plane")) {
+        Plane *plane = new Plane(Vector3(1, 0, 0), 0);
+        tracer.scene.add(plane);
+    }
+    ImGui::SameLine();
     if (ImGui::Button("new Triangle")) {
         Triangle *triangle = new Triangle(Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(0, 0, 0));
         tracer.scene.add(triangle);
@@ -145,9 +152,10 @@ void show_toolbox_scene() {
 
 
 void show_toolbox_window() {
+    static bool flag_show_toolbox_render = true;
     ImGui::Begin("Toolbox");
     show_toolbox_info();
-    if (ImGui::CollapsingHeader("Render")) show_toolbox_render();
+    if (ImGui::CollapsingHeader("Render", &flag_show_toolbox_render)) show_toolbox_render();
     if (ImGui::CollapsingHeader("Scene")) show_toolbox_scene();
     ImGui::End();
 }
@@ -205,11 +213,12 @@ int main(int argc, char** argv)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
 
-    add_scene1(tracer);
-    config.num_trace_depth = 3;
-    config.num_box_light_sample = 49;
-    config.num_diffuse_reflect_sample = 32;
+    add_scene2(tracer);
+    config.num_trace_depth = 2;
+    config.num_box_light_sample = 1;
+    config.num_diffuse_reflect_sample = 1;
     config.num_worker = std::thread::hardware_concurrency();
+    status = WAIT_TO_RENDER;
 
     std::thread render_thread([&]{
         while (status != EXIT_RENDER) {
@@ -271,6 +280,7 @@ int main(int argc, char** argv)
     SDL_DestroyWindow(window);
     SDL_Quit();
 
+    tracer.stop();
     status = EXIT_RENDER;
     render_thread.join();
     delete [] data;

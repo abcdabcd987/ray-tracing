@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstdio>
 #include <vector>
 
 constexpr float EPS = 1e-4;
@@ -11,8 +12,7 @@ struct Vector3 {
         struct { float r, g, b; };
         float data[3];
     };
-    Vector3() : x(float(0)), y(float(0)), z(float(0)) {}
-    Vector3(float xx) : x(xx), y(xx), z(xx) {}
+    Vector3() : x(0), y(0), z(0) {}
     Vector3(float xx, float yy, float zz) : x(xx), y(yy), z(zz) {}
     Vector3& operator+=(const Vector3 &v) { x += v.x, y += v.y, z += v.z; return *this; }
     Vector3& operator-=(const Vector3 &v) { x -= v.x, y -= v.y, z -= v.z; return *this; }
@@ -25,6 +25,7 @@ struct Vector3 {
     friend Vector3 operator*(Vector3 u, const Vector3 &v) { return u *= v; }
     friend Vector3 operator/(Vector3 u, const Vector3 &v) { return u /= v; }
     friend Vector3 operator*(Vector3 u, float k) { return u *= k; }
+    friend Vector3 operator*(float k, Vector3 u) { return u *= k; }
     friend Vector3 operator/(Vector3 u, float k) { return u /= k; }
     friend Vector3 expf(const Vector3& v) { return Vector3(std::expf(v.x), std::expf(v.y), std::expf(v.z)); }
     Vector3 operator-() const { return Vector3(-x, -y, -z); }
@@ -127,35 +128,44 @@ struct Sphere : public Primitive {
 
 
 struct Triangle : public Primitive {
-    Vector3 v, e1, e2;
+    Vector3 v0, v1, v2;
     Vector3 normal;
 
-    Triangle(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2)
-            : Primitive(), v(v0), e1(v1-v0), e2(v2-v0), normal(e1.cross(e2))
+    Triangle(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_)
+            : Primitive(), v0(v0_), v1(v1_), v2(v2_),
+              normal((v1-v0).cross(v2-v0).normalized())
     { }
 
-    void set_vertices(const Vector3 &v0, const Vector3 &v1, const Vector3 &v2) {
-        v = v0;
-        e1 = v1 - v0;
-        e2 = v2 - v0;
-        normal = e1.cross(e2);
+    void set_vertices(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_) {
+        v0 = v0_;
+        v1 = v1_;
+        v2 = v2_;
+        normal = (v1-v0).cross(v2-v0).normalized();
     }
 
     IntersectionResult intersect(const Ray &ray) const override {
-        // see https://github.com/ppwwyyxx/Ray-Tracing-Engine/blob/master/src/renderable/face.cc
+        // see https://www.scratchapixel.com/code.php?id=11&origin=/lessons/3d-basic-rendering/ray-tracing-polygon-mesh
         IntersectionResult res = {.hit = IntersectionResult::MISS};
-        float dot = ray.direction.dot(normal);
-        if (fabsf(dot) < EPS) return res;
-        Vector3 line = v - ray.origin;
-        Vector3 line_r = ray.direction.cross(line);
-        res.distance = line.dot(normal) / dot;
-        if (res.distance < 0) return res;
+        Vector3 v0v1 = v1 - v0;
+        Vector3 v0v2 = v2 - v0;
+        Vector3 pvec = ray.direction.cross(v0v2);
+        float det = v0v1.dot(pvec);
 
-        float gx = -line_r.dot(e2) / dot;
-        if (gx < -EPS or gx > 1 + EPS) return res;
-        float gy = line_r.dot(e1) / dot;
-        if (gy < -EPS or gx + gy > 1 + EPS) return res;
+        // ray and triangle are parallel if det is close to 0
+        if (fabs(det) < EPS) return res;
+
+        float invDet = 1 / det;
+
+        Vector3 tvec = ray.origin - v0;
+        float u = tvec.dot(pvec) * invDet;
+        if (u < 0 || u > 1) return res;
+
+        Vector3 qvec = tvec.cross(v0v1);
+        float v = ray.direction.dot(qvec) * invDet;
+        if (v < 0 || u + v > 1) return res;
+
         res.hit = IntersectionResult::HIT;
+        res.distance = v0v2.dot(qvec) * invDet;
         return res;
     }
 
@@ -223,13 +233,64 @@ struct Box : public Primitive {
 };
 
 
+struct Body {
+    std::vector<Triangle*> triangles;
+    Body(): triangles() {}
+    void set_material(const Material &m) { for (auto t : triangles) t->material = m; }
+};
+
+
 struct Scene {
     std::vector<Primitive*> primitives;
     std::vector<Primitive*> lights;
+    std::vector<Body*> bodies;
 
     void add(Primitive *p) {
         primitives.emplace_back(p);
         if (p->light) lights.emplace_back(p);
+    }
+
+    Body* load_obj(const char *path) {
+        FILE *f = fopen(path, "r");
+        if (!f) return nullptr;
+
+        std::vector<Vector3> vertices;
+        Body *body = new Body();
+        char buf[100];
+        while (fscanf(f, " %s", buf) != EOF) {
+            if (strcmp(buf, "v") == 0) {
+                float x, y, z;
+                fscanf(f, "%f%f%f", &x, &y, &z);
+                vertices.emplace_back(x, y, z);
+            } else if (strcmp(buf, "f") == 0) {
+                int v[3];
+                for (int i = 0; i < 3; ++i) {
+                    fscanf(f, " %s", buf);
+                    sscanf(buf, "%d", &v[i]);
+                    --v[i];
+                }
+                Triangle *triangle = new Triangle(vertices[v[0]], vertices[v[1]], vertices[v[2]]);
+                body->triangles.emplace_back(triangle);
+                add(triangle);
+            } else if (buf[0] == '#'
+                    || strcmp(buf, "mtllib") == 0
+                    || strcmp(buf, "vn") == 0
+                    || strcmp(buf, "vt") == 0
+                    || strcmp(buf, "s") == 0
+                    || strcmp(buf, "g") == 0
+                    || strcmp(buf, "o") == 0
+                    || strcmp(buf, "usemtl") == 0) {
+                // not supported
+                while (fgetc(f) != '\n');
+            } else {
+                // unexpected
+                return nullptr;
+            }
+        }
+        bodies.emplace_back(body);
+
+        fclose(f);
+        return body;
     }
 };
 
