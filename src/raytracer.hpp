@@ -12,8 +12,8 @@
 
 struct RayTracer {
     struct TraceConfig {
+        float num_light_sample_per_unit = 1.0f;
         int num_trace_depth = 3;
-        int num_box_light_sample = 49;
         int num_diffuse_reflect_sample = 32;
         int num_worker = 4;
 
@@ -26,21 +26,11 @@ struct RayTracer {
     std::atomic<bool> flag_stopped;
     RayTracer(): scene() {}
 
-    struct FindNearestResult {
-        IntersectionResult::HitType hit;
-        float distance;
-        const Primitive *primitive;
-    };
     FindNearestResult find_nearest(const Ray &ray) const {
-        FindNearestResult res = {.hit = IntersectionResult::MISS, .distance = std::numeric_limits<float>::max(), .primitive = nullptr};
-        for (const Primitive *pr : scene.primitives) {
-            auto r = pr->intersect(ray);
-            if (r.hit != IntersectionResult::MISS && r.distance < res.distance && r.distance > 0) {
-                res.hit = r.hit;
-                res.distance = r.distance;
-                res.primitive = pr;
-            }
-        }
+        FindNearestResult res;
+        for (const Primitive *pr : scene.primitives)
+            res.update(pr->intersect(ray), pr);
+        res.update(scene.kdtree.find_nearest(ray));
         return res;
     }
 
@@ -55,24 +45,23 @@ struct RayTracer {
         return r.primitive == light ? 1.f : .0f;
     }
     CalcShadeResult calc_shade(const Primitive *light, const Vector3 &pi, const TraceConfig &config) const {
-        if (const Sphere *ls = dynamic_cast<const Sphere*>(light)) {
+        if (light->type == Primitive::SPHERE) {
+            const Sphere *ls = static_cast<const Sphere *>(light);
             Vector3 light_diff = ls->center - pi;
             float shade = calc_shade_point_light(ls, light_diff, pi);
             return {.shade = shade, .light_direction = light_diff.normalized()};
-        } else if (const Box *lb = dynamic_cast<const Box*>(light)) {
+        } else if (light->type == Primitive::BOX) {
+            const Box *lb = static_cast<const Box*>(light);
             Vector3 L(0, 0, 0);
             float shade = .0;
-            // FIXME: This assumes y is small
-            const int n = static_cast<int>(sqrt(config.num_box_light_sample));
-            for (int i = 0, k = 0; i < n; ++i)
-                for (int j = 0; j < n && k < config.num_box_light_sample; ++j, ++k) {
-                    Vector3 ratio(randf() * (i+1)/n, randf(), randf() * (j+1)/n);
-                    Vector3 light_point = lb->aabb.pos + ratio * lb->aabb.size;
-                    Vector3 light_diff = light_point - pi;
-                    L += light_diff.normalized();
-                    shade += calc_shade_point_light(lb, light_diff, pi);
-                }
-            return {.shade = shade / config.num_box_light_sample, .light_direction = L / config.num_box_light_sample};
+            const int n = lb->get_num_light_sample(config.num_light_sample_per_unit);
+            for (int i = 0; i < n; ++i) {
+                const Vector3 &light_point = lb->light_samples[i];
+                Vector3 light_diff = light_point - pi;
+                L += light_diff.normalized();
+                shade += calc_shade_point_light(lb, light_diff, pi);
+            }
+            return {.shade = shade / n, .light_direction = L / n};
         }
         return {.shade = 0};
     };
@@ -138,7 +127,7 @@ struct RayTracer {
                 Vector3 RN2 = RP.cross(RN1);
                 Color c(0, 0, 0);
                 TraceConfig config_importance = config;
-                config_importance.num_box_light_sample *= 0.25;
+                config_importance.num_light_sample_per_unit *= 0.25;
                 for (int i = 0; i < config.num_diffuse_reflect_sample; ++i) {
                     float len = randf() * k_diffuse_reflect;
                     float angle = static_cast<float>(randf() * 2 * M_PI);
@@ -155,7 +144,7 @@ struct RayTracer {
                 Vector3 R = ray.direction - 2.f * ray.direction.dot(N) * N;
                 Ray ray_reflect(pi + R * EPS, R);
                 TraceConfig config_importance = config;
-                config_importance.num_box_light_sample *= 0.5;
+                config_importance.num_light_sample_per_unit *= 0.5;
                 RayTraceResult r = ray_trace(ray_reflect, refract_index, depth + 1, config_importance);
                 if (r.hit)
                     res.color += k_reflect * r.color * res.primitive->material.color;
@@ -174,7 +163,7 @@ struct RayTracer {
                 Vector3 T = n * ray.direction + (n * cosI - sqrtf(cosT2)) * N;
                 Ray ray_refract(pi + T * EPS, T);
                 TraceConfig config_importance = config;
-                config_importance.num_box_light_sample *= 0.5;
+                config_importance.num_light_sample_per_unit *= 0.5;
                 RayTraceResult r = ray_trace(ray_refract, k_refract_index, depth + 1, config_importance);
                 if (r.hit) {
                     Color absorb = res.primitive->material.color * 0.15f * -r.distance;
@@ -192,6 +181,11 @@ struct RayTracer {
         flag_to_stop = false;
         flag_stopped = false;
         cnt_rendered = 0;
+
+        for (Primitive *light : scene.lights)
+            light->sample_light(config.num_light_sample_per_unit);
+        scene.build();
+
         float wx1 = -4, wx2 = 4, wy1 = 3, wy2 = -3;
         float dx = (wx2 - wx1) / width;
         float dy = (wy2 - wy1) / height;
@@ -199,11 +193,8 @@ struct RayTracer {
 
         moodycamel::ConcurrentQueue<std::pair<int, int>> q;
         auto func = [&] {
-            for (std::pair<int, int> item; ;) {
-                q.try_dequeue(item);
-                int x = item.first, y = item.second;
-                if (x == -1) return;
-
+            for (std::pair<int, int> item; q.try_dequeue(item);) {
+                const int x = item.first, y = item.second;
                 const float sy = wy1 + dy * y;
                 const float sx = wx1 + dx * x;
                 Ray ray(o, Vector3(sx, sy, -2) - o);
@@ -225,7 +216,6 @@ struct RayTracer {
 
         std::vector<std::thread> workers;
         for (int i = 0; i < config.num_worker; ++i) workers.emplace_back(func);
-        for (int i = 0; i < config.num_worker; ++i) q.enqueue(std::make_pair(-1, -1));
         const int total = width * height;
         for (;;) {
             int cnt = cnt_rendered.load();
@@ -240,7 +230,6 @@ struct RayTracer {
                 fprintf(stderr, "got stop flag..."); fflush(stderr);
                 std::pair<int, int> ignore;
                 while (q.try_dequeue(ignore));
-                for (int i = 0; i < config.num_worker; ++i) q.enqueue(std::make_tuple(-1, -1));
                 for (auto &worker : workers) worker.join();
                 fprintf(stderr, "stopped\n");
                 flag_stopped = true;

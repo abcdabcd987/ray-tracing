@@ -61,7 +61,7 @@ void show_toolbox_render() {
     render_width = rwh[0], render_height = rwh[1];
 
     ImGui::SliderInt("num_trace_depth", &config.num_trace_depth, 1, 10);
-    ImGui::SliderInt("num_box_light_sample", &config.num_box_light_sample, 1, 256);
+    ImGui::SliderFloat("num_light_sample_per_unit", &config.num_light_sample_per_unit, 1.f, 2000.f);
     ImGui::SliderInt("num_diffuse_reflect_sample", &config.num_diffuse_reflect_sample, 1, 128);
     ImGui::SliderInt("workers", &config.num_worker, 1, std::thread::hardware_concurrency());
 
@@ -72,24 +72,28 @@ void show_toolbox_render() {
 
 
 void show_toolbox_scene() {
-    static char buf[100];
+    static char buf[100], buf2[100];
     for (size_t i = 0; i < tracer.scene.primitives.size(); ++i) {
         Primitive *p = tracer.scene.primitives[i];
         bool open;
+        if (p->light)
+            sprintf(buf2, "light %d samples", p->get_num_light_sample(config.num_light_sample_per_unit));
+        else
+            buf2[0] = 0;
         if (Sphere *sphere = dynamic_cast<Sphere*>(p)) {
-            sprintf(buf, "%zu: Sphere %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            sprintf(buf, "%zu: Sphere %s###scene-primitive-%zu", i, buf2, i);
             if ((open = ImGui::TreeNode(buf))) {
                 ImGui::DragFloat3("center", sphere->center.data, 0.01f);
                 ImGui::DragFloat("radius", &sphere->radius, 0.001f);
             }
         } else if (Box *box = dynamic_cast<Box*>(p)) {
-            sprintf(buf, "%zu: Box %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            sprintf(buf, "%zu: Box %s###scene-primitive-%zu", i, buf2, i);
             if ((open = ImGui::TreeNode(buf))) {
                 ImGui::DragFloat3("pos", box->aabb.pos.data, 0.01f);
                 ImGui::DragFloat3("size", box->aabb.size.data, 0.01f);
             }
         } else if (Triangle *triangle = dynamic_cast<Triangle*>(p)) {
-            sprintf(buf, "%zu: Triangle %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            sprintf(buf, "%zu: Triangle %s###scene-primitive-%zu", i, buf2, i);
             if ((open = ImGui::TreeNode(buf))) {
                 Vector3 v0 = triangle->v0, v1 = triangle->v1, v2 = triangle->v2;
                 ImGui::DragFloat3("vertex 0", v0.data, 0.01f);
@@ -98,13 +102,13 @@ void show_toolbox_scene() {
                 triangle->set_vertices(v0, v1, v2);
             }
         } else if (Plane *plane = dynamic_cast<Plane*>(p)) {
-            sprintf(buf, "%zu: Plane %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            sprintf(buf, "%zu: Plane %s###scene-primitive-%zu", i, buf2, i);
             if ((open = ImGui::TreeNode(buf))) {
                 ImGui::DragFloat3("normal", plane->normal.data, 0.001f);
                 ImGui::DragFloat("distance", &plane->distance, 0.01f);
             }
         } else {
-            sprintf(buf, "%zu: Primitive %s###scene-primitive-%zu", i, p->light ? "light" : "", i);
+            sprintf(buf, "%zu: Primitive %s###scene-primitive-%zu", i, buf2, i);
             open = ImGui::TreeNode(buf);
         }
         if (open) {
@@ -122,7 +126,7 @@ void show_toolbox_scene() {
             ImGui::SliderFloat("k_diffuse_reflect", &p->material.k_diffuse_reflect, 0, 1);
             ImGui::SliderFloat("k_specular", &p->material.k_specular, 0, 1);
             ImGui::SliderFloat("k_refract", &p->material.k_refract, 0, 1);
-            ImGui::SliderFloat("k_refract_index", &p->material.k_refract_index, 0, 1);
+            ImGui::SliderFloat("k_refract_index", &p->material.k_refract_index, 0, 1.5f);
             ImGui::SliderFloat("k_ambient", &p->material.k_ambient, 0, 1);
             ImGui::TreePop();
         }
@@ -151,12 +155,40 @@ void show_toolbox_scene() {
 }
 
 
+void show_toolbox_body() {
+    static char buf[100];
+    static float scale = 1.f, offset[3] = {0, 0, 0};
+    for (size_t i = 0; i < tracer.scene.bodies.size(); ++i) {
+        Body *body = tracer.scene.bodies[i];
+        sprintf(buf, "Body %zu###body-%zu", i, i);
+        if (ImGui::TreeNode(buf)) {
+            ImGui::DragFloat("", &scale, 0.001f);
+            ImGui::SameLine();
+            if (ImGui::Button("scale")) {
+                body->scale(scale);
+                scale = 1.f;
+            }
+
+            ImGui::DragFloat3("", offset, 0.01f);
+            ImGui::SameLine();
+            if (ImGui::Button("offset")) {
+                body->offset(Vector3(offset[0], offset[1], offset[2]));
+                offset[0] = 0, offset[1] = 0, offset[2] = 0;
+            }
+
+            ImGui::TreePop();
+        }
+    }
+}
+
+
 void show_toolbox_window() {
     static bool flag_show_toolbox_render = true;
     ImGui::Begin("Toolbox");
     show_toolbox_info();
     if (ImGui::CollapsingHeader("Render", &flag_show_toolbox_render)) show_toolbox_render();
     if (ImGui::CollapsingHeader("Scene")) show_toolbox_scene();
+    if (ImGui::CollapsingHeader("Body")) show_toolbox_body();
     ImGui::End();
 }
 
@@ -202,20 +234,22 @@ int main(int argc, char** argv)
 
     const auto scale = ImGui::GetIO().DisplayFramebufferScale;
     width = 800, height = 600;
-    render_width = static_cast<int>(width * scale.x);
-    render_height = static_cast<int>(height * scale.y);
+//    render_width = static_cast<int>(width * scale.x);
+//    render_height = static_cast<int>(height * scale.y);
+    render_width = 200;
+    render_height = 150;
     data = new uint8_t[render_width * render_height * 3];
     memset(data, 0, sizeof(*data) * render_width * render_height * 3);
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D, tex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
 
     add_scene2(tracer);
+    config.num_light_sample_per_unit = 1.f;
     config.num_trace_depth = 2;
-    config.num_box_light_sample = 1;
     config.num_diffuse_reflect_sample = 1;
     config.num_worker = std::thread::hardware_concurrency();
     status = WAIT_TO_RENDER;
@@ -236,6 +270,8 @@ int main(int argc, char** argv)
                 time_render_end = std::chrono::high_resolution_clock::now();
                 if (success)
                     save_ppm("/tmp/ray-tracing.ppm", data, width, height);
+                else if (status == EXIT_RENDER)
+                    return;
                 status = RENDERED;
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -273,6 +309,8 @@ int main(int argc, char** argv)
         ImGui::Render();
         SDL_GL_SwapWindow(window);
     }
+    status = EXIT_RENDER;
+    tracer.stop();
 
     // Cleanup
     ImGui_ImplSdlGL3_Shutdown();
@@ -280,8 +318,6 @@ int main(int argc, char** argv)
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    tracer.stop();
-    status = EXIT_RENDER;
     render_thread.join();
     delete [] data;
 

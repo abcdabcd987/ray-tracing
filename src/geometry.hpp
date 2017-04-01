@@ -1,5 +1,4 @@
 #pragma once
-
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -28,6 +27,12 @@ struct Vector3 {
     friend Vector3 operator*(float k, Vector3 u) { return u *= k; }
     friend Vector3 operator/(Vector3 u, float k) { return u /= k; }
     friend Vector3 expf(const Vector3& v) { return Vector3(std::expf(v.x), std::expf(v.y), std::expf(v.z)); }
+    friend Vector3 min(const Vector3& u, const Vector3 &v) {
+        return Vector3(std::min(u.x, v.x), std::min(u.y, v.y), std::min(u.z, v.z));
+    }
+    friend Vector3 max(const Vector3& u, const Vector3 &v) {
+        return Vector3(std::max(u.x, v.x), std::max(u.y, v.y), std::max(u.z, v.z));
+    }
     Vector3 operator-() const { return Vector3(-x, -y, -z); }
     float dot(const Vector3 &v) const { return x * v.x + y * v.y + z * v.z; }
     Vector3 cross(const Vector3 &v) const { return Vector3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x); }
@@ -41,10 +46,30 @@ struct Vector3 {
 typedef Vector3 Color;
 
 
+inline float randf() {
+    return rand() / static_cast<float>(RAND_MAX);
+}
+
+
+struct Ray {
+    Vector3 origin;
+    Vector3 direction;
+    Ray(const Vector3 &origin, const Vector3 &direction_) :
+            origin(origin), direction(direction_.normalized()) {}
+};
+
+
+struct IntersectionResult {
+    enum HitType {MISS, HIT, INSIDE} hit;
+    float distance;
+};
+
+
 struct AABB {
     Vector3 pos;
     Vector3 size;
 
+    AABB(): pos(), size() {}
     AABB(const Vector3 &pos_, const Vector3& size_): pos(pos_), size(size_) {}
 
     bool intersect(const AABB& rhs) const {
@@ -55,20 +80,44 @@ struct AABB {
                 (v4.z > v1.z) && (v3.z < v2.z));
     }
 
-    bool contain(const Vector3 &a_Pos) {
+    IntersectionResult intersect(const Ray &ray) const {
+        Vector3 d = ray.direction, o = ray.origin;
+        Vector3 v1 = pos, v2 = pos + size;
+        float dist[6] = {
+                d.x ? (v1.x - o.x) / d.x : 0,
+                d.x ? (v2.x - o.x) / d.x : 0,
+                d.y ? (v1.y - o.y) / d.y : 0,
+                d.y ? (v2.y - o.y) / d.y : 0,
+                d.z ? (v1.z - o.z) / d.z : 0,
+                d.z ? (v2.z - o.z) / d.z : 0,
+        };
+        IntersectionResult res = {.hit = IntersectionResult::MISS};
+        for (int i = 0; i < 6; ++i) {
+            if (!dist[i]) continue;
+            Vector3 ip = o + dist[i] * d;
+            if ((ip.x > (v1.x - EPS)) && (ip.x < (v2.x + EPS)) &&
+                (ip.y > (v1.y - EPS)) && (ip.y < (v2.y + EPS)) &&
+                (ip.z > (v1.z - EPS)) && (ip.z < (v2.z + EPS))) {
+                if (res.hit == IntersectionResult::MISS || res.distance > dist[i])
+                    res = {.hit = IntersectionResult::HIT, .distance = dist[i]};
+            }
+        }
+        return res;
+    }
+
+    bool contain(const Vector3 &a_Pos) const {
         Vector3 v1 = pos, v2 = pos + size;
         return ((a_Pos.x > (v1.x - EPS)) && (a_Pos.x < (v2.x + EPS)) &&
                 (a_Pos.y > (v1.y - EPS)) && (a_Pos.y < (v2.y + EPS)) &&
                 (a_Pos.z > (v1.z - EPS)) && (a_Pos.z < (v2.z + EPS)));
     }
-};
 
-
-struct Ray {
-    Vector3 origin;
-    Vector3 direction;
-    Ray(const Vector3 &origin, const Vector3 &direction_) :
-            origin(origin), direction(direction_.normalized()) {}
+    void extend(const AABB &rhs) {
+        Vector3 vmin = min(pos, rhs.pos);
+        Vector3 vmax = max(pos + size, rhs.pos + rhs.size);
+        pos = vmin;
+        size = vmax - vmin;
+    }
 };
 
 
@@ -84,19 +133,29 @@ struct Material {
 };
 
 
-struct IntersectionResult {
-    enum HitType {MISS, HIT, INSIDE} hit;
-    float distance;
-};
-
-
 struct Primitive {
+    enum Type { SPHERE, TRIANGLE, PLANE, BOX };
+    Type type;
     bool light;
     Material material;
-    Primitive(): light(false), material() {}
+    Vector3 *light_samples;
+    Primitive(Type type_): type(type_), light(false), material(), light_samples(nullptr) {}
     virtual IntersectionResult intersect(const Ray& ray) const = 0;
     virtual Vector3 get_normal(const Vector3& pos) const = 0;
     virtual Color get_color(const Vector3 &pos) const { return material.color; }
+    virtual float get_volume() const { return 0; }
+    virtual void sample_light(const float num_light_sample_per_unit) { }
+    virtual int get_num_light_sample(float num_light_sample_per_unit) const {
+        float volume = get_volume();
+        return std::max(1, static_cast<int>(std::ceil(volume * num_light_sample_per_unit)));
+    }
+    int alloc_light_samples(float num_light_sample_per_unit) {
+        int n = get_num_light_sample(num_light_sample_per_unit);
+        delete [] light_samples;
+        light_samples = static_cast<Vector3*>(::operator new(n * sizeof(Vector3)));
+        return n;
+    }
+    virtual ~Primitive() { delete [] light_samples; }
 };
 
 
@@ -104,7 +163,7 @@ struct Sphere : public Primitive {
     Vector3 center;
     float radius;
     Sphere(const Vector3 &center_, float radius_) :
-            Primitive(), center(center_), radius(radius_) {}
+            Primitive(SPHERE), center(center_), radius(radius_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         Vector3 v = ray.origin - center;
@@ -124,6 +183,26 @@ struct Sphere : public Primitive {
     Vector3 get_normal(const Vector3& pos) const override {
         return (pos - center).normalized();
     }
+
+    float get_volume() const override {
+        return 4.f / 3.f * static_cast<float>(M_PI) * radius * radius;
+    }
+
+    void sample_light(const float num_light_sample_per_unit) override {
+        // see: http://stackoverflow.com/questions/5408276/sampling-uniformly-distributed-random-points-inside-a-spherical-volume
+        int n = alloc_light_samples(num_light_sample_per_unit);
+        for (int i = 0; i < n; ++i) {
+            float phi = randf() * static_cast<float>(M_PI);
+            float cos_theta =  randf() * 2.f - 1.f;
+            float u = randf();
+            float theta = std::acos(cos_theta);
+            float r = radius * std::cbrtf(u);
+            float x = r * std::sinf(theta) * std::cosf(phi);
+            float y = r * std::sinf(theta) * std::sinf(phi);
+            float z = r * cos_theta;
+            light_samples[i] = Vector3(x, y, z);
+        }
+    }
 };
 
 
@@ -132,7 +211,7 @@ struct Triangle : public Primitive {
     Vector3 normal;
 
     Triangle(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_)
-            : Primitive(), v0(v0_), v1(v1_), v2(v2_),
+            : Primitive(TRIANGLE), v0(v0_), v1(v1_), v2(v2_),
               normal((v1-v0).cross(v2-v0).normalized())
     { }
 
@@ -164,13 +243,38 @@ struct Triangle : public Primitive {
         float v = ray.direction.dot(qvec) * invDet;
         if (v < 0 || u + v > 1) return res;
 
+        float dist = v0v2.dot(qvec) * invDet;
+        if (dist < 0) return res;
         res.hit = IntersectionResult::HIT;
-        res.distance = v0v2.dot(qvec) * invDet;
+        res.distance = dist;
         return res;
     }
 
     Vector3 get_normal(const Vector3 &pos) const override {
         return normal;
+    }
+
+    AABB get_bounding_box() const {
+        Vector3 vmin = min(v0, min(v1, v2));
+        Vector3 vmax = max(v0, max(v1, v2));
+        return AABB(vmin, vmax - vmin);
+    }
+
+    float get_volume() const override {
+        // pretend that a triangle has a volume
+        float area = .5f * (v2-v0).cross(v1-v0).length();
+        return area * 0.1f;
+    }
+
+    void sample_light(const float num_light_sample_per_unit) override {
+        int n = alloc_light_samples(num_light_sample_per_unit);
+        for (int i = 0; i < n; ++i) {
+            // see: http://math.stackexchange.com/questions/18686/uniform-random-point-in-triangle
+            Vector3 v0v1 = v1 - v0;
+            Vector3 v0v2 = v2 - v0;
+            float sqrt_r1 = std::sqrtf(randf()), r2 = randf();
+            light_samples[i] = sqrt_r1 * (1.f - r2) * v0v1 + r2 * sqrt_r1 * v0v2;
+        }
     }
 };
 
@@ -179,7 +283,7 @@ struct Plane : public Primitive {
     Vector3 normal;
     float distance;
     Plane(const Vector3& normal_, float distance_) :
-            Primitive(), normal(normal_.normalized()), distance(distance_) {}
+            Primitive(Primitive::PLANE), normal(normal_.normalized()), distance(distance_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         float d = normal.dot(ray.direction);
@@ -199,36 +303,27 @@ struct Plane : public Primitive {
 struct Box : public Primitive {
     AABB aabb;
 
-    Box(const AABB &aabb_): Primitive(), aabb(aabb_) {}
+    Box(const AABB &aabb_): Primitive(Primitive::BOX), aabb(aabb_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
-        Vector3 d = ray.direction, o = ray.origin;
-        Vector3 v1 = aabb.pos, v2 = aabb.pos + aabb.size;
-        float dist[6] = {
-                d.x ? (v1.x - o.x) / d.x : 0,
-                d.x ? (v2.x - o.x) / d.x : 0,
-                d.y ? (v1.y - o.y) / d.y : 0,
-                d.y ? (v2.y - o.y) / d.y : 0,
-                d.z ? (v1.z - o.z) / d.z : 0,
-                d.z ? (v2.z - o.z) / d.z : 0,
-        };
-        IntersectionResult res = {.hit = IntersectionResult::MISS};
-        for (int i = 0; i < 6; ++i) {
-            if (!dist[i]) continue;
-            Vector3 ip = o + dist[i] * d;
-            if ((ip.x > (v1.x - EPS)) && (ip.x < (v2.x + EPS)) &&
-                (ip.y > (v1.y - EPS)) && (ip.y < (v2.y + EPS)) &&
-                (ip.z > (v1.z - EPS)) && (ip.z < (v2.z + EPS))) {
-                if (res.hit == IntersectionResult::MISS || res.distance > dist[i])
-                    res = {.hit = IntersectionResult::HIT, .distance = dist[i]};
-            }
-        }
-        return res;
+        return aabb.intersect(ray);
     }
 
     Vector3 get_normal(const Vector3 &pos) const override {
         assert(false);
         return Vector3(0, 0, 0);
+    }
+
+    float get_volume() const override {
+        return aabb.size.x * aabb.size.y * aabb.size.z;
+    }
+
+    void sample_light(const float num_light_sample_per_unit) override {
+        int n = alloc_light_samples(num_light_sample_per_unit);
+        for (int i = 0; i < n; ++i) {
+            Vector3 ratio = Vector3(randf(), randf(), randf());
+            light_samples[i] = aabb.pos + ratio * aabb.size;
+        }
     }
 };
 
@@ -236,17 +331,146 @@ struct Box : public Primitive {
 struct Body {
     std::vector<Triangle*> triangles;
     Body(): triangles() {}
-    void set_material(const Material &m) { for (auto t : triangles) t->material = m; }
+    void set_material(const Material &m) { for (Triangle* t : triangles) t->material = m; }
+
+    void scale(float k) {
+        for (Triangle* t : triangles) {
+            t->v0 *= k;
+            t->v1 *= k;
+            t->v2 *= k;
+        }
+    }
+
+    void offset(const Vector3 &offset) {
+        for (Triangle* t : triangles) {
+            t->v0 += offset;
+            t->v1 += offset;
+            t->v2 += offset;
+        }
+    }
+};
+
+
+struct FindNearestResult {
+    IntersectionResult::HitType hit = IntersectionResult::MISS;
+    float distance = std::numeric_limits<float>::max();
+    const Primitive *primitive = nullptr;
+    void update(IntersectionResult::HitType rhs_hit, float rhs_distance, const Primitive *rhs_primitive) {
+        if (rhs_hit != IntersectionResult::MISS &&
+            (hit == IntersectionResult::MISS || distance > rhs_distance)) {
+            hit = rhs_hit;
+            distance = rhs_distance;
+            primitive = rhs_primitive;
+        }
+    }
+    void update(const IntersectionResult& rhs, const Primitive *rhs_primitive) {
+        update(rhs.hit, rhs.distance, rhs_primitive);
+    }
+    void update(const FindNearestResult &rhs) {
+        update(rhs.hit, rhs.distance, rhs.primitive);
+    }
+};
+
+
+// ref: https://blog.frogslayer.com/kd-trees-for-faster-ray-tracing-with-triangles/
+// ref: http://www.flipcode.com/archives/Raytracing_Topics_Techniques-Part_7_Kd-Trees_and_More_Speed.shtml
+// ref: https://github.com/ppwwyyxx/Ray-Tracing-Engine/blob/master/src/kdtree.cc
+struct KDTree {
+    struct Node {
+        AABB bbox;
+        Node* child[2];
+        std::vector<const Triangle*> triangles;
+        Node(): bbox(), child(), triangles() {}
+        ~Node() { delete child[0]; delete child[1]; }
+    };
+    Node *root;
+    static constexpr int NUM_LEAF_OBJS = 8;
+    static constexpr int NUM_MAX_DEPTH = 32;
+    KDTree(): root(nullptr) {}
+    ~KDTree() { delete root; }
+
+    void build(const std::vector<const Triangle*> &triangles) {
+        delete root;
+        root = build(triangles, 0);
+    }
+
+    FindNearestResult find_nearest(const Ray &ray) const {
+        return find_nearest(ray, root);
+    }
+
+private:
+
+    float get_split_plane_naive(const std::vector<const Triangle*> &triangles, int axis) const {
+        float sum = 0;
+        for (const Triangle *t : triangles) {
+            sum += t->v0.data[axis];
+            sum += t->v1.data[axis];
+            sum += t->v2.data[axis];
+        }
+        return sum / (3 * triangles.size());
+    }
+
+    Node *build(const std::vector<const Triangle*> &triangles, int depth) const {
+        Node *node = new Node();
+        for (const Triangle *t : triangles)
+            node->bbox.extend(t->get_bounding_box());
+        if (triangles.size() >= NUM_LEAF_OBJS && depth < NUM_MAX_DEPTH) {
+            int axis = depth % 3;
+            float plane = get_split_plane_naive(triangles, axis);
+            int common = 0;
+            std::vector<const Triangle*> lef, rig;
+            for (const Triangle *t : triangles) {
+                bool in_lef = t->v0.data[axis] <= plane || t->v1.data[axis] <= plane || t->v2.data[axis] <= plane;
+                bool in_rig = t->v0.data[axis] >= plane || t->v1.data[axis] >= plane || t->v2.data[axis] >= plane;
+                if (in_lef) lef.emplace_back(t);
+                if (in_rig) rig.emplace_back(t);
+                if (in_lef && in_rig) ++common;
+            }
+            if (common * 2 < triangles.size()) {
+                node->child[0] = build(lef, depth + 1);
+                node->child[1] = build(rig, depth + 1);
+                return node;
+            }
+        }
+
+        // if too few triangles, or too deep, or too many common triangles
+        node->triangles = triangles;
+        return node;
+    }
+
+    FindNearestResult find_nearest(const Ray &ray, Node *node) const {
+        FindNearestResult res;
+        IntersectionResult ibox = node->bbox.intersect(ray);
+        if (ibox.hit == IntersectionResult::MISS) return res;
+        if (node->child[0] || node->child[1]) {
+            res.update(find_nearest(ray, node->child[0]));
+            res.update(find_nearest(ray, node->child[1]));
+            return res;
+        }
+        for (const Triangle *t : node->triangles)
+            res.update(t->intersect(ray), t);
+        return res;
+    }
 };
 
 
 struct Scene {
-    std::vector<Primitive*> primitives;
+    std::vector<Primitive*> all_primitives;
     std::vector<Primitive*> lights;
+    std::vector<Primitive*> primitives;
     std::vector<Body*> bodies;
+    KDTree kdtree;
+
+    void build() {
+        std::vector<const Triangle*> v;
+        for (const Body *body : bodies)
+            v.insert(v.end(), body->triangles.begin(), body->triangles.end());
+        kdtree.build(v);
+    }
 
     void add(Primitive *p) {
-        primitives.emplace_back(p);
+        all_primitives.emplace_back(p);
+        if (p->type != Primitive::TRIANGLE) primitives.emplace_back(p);
         if (p->light) lights.emplace_back(p);
     }
 
@@ -292,6 +516,11 @@ struct Scene {
         fclose(f);
         return body;
     }
+
+    ~Scene() {
+        for (Primitive *p : all_primitives) delete p;
+        for (Body *b : bodies) delete b;
+    }
 };
 
 
@@ -299,10 +528,6 @@ inline void color_save_to_array(uint8_t *out, const Color &color) {
     out[0] = static_cast<uint8_t>(std::min(color.r * 255.f, 255.f));
     out[1] = static_cast<uint8_t>(std::min(color.g * 255.f, 255.f));
     out[2] = static_cast<uint8_t>(std::min(color.b * 255.f, 255.f));
-}
-
-inline float randf() {
-    return rand() / static_cast<float>(RAND_MAX);
 }
 
 inline void save_ppm(const char *path, uint8_t *data, int width, int height) {
