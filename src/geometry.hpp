@@ -113,10 +113,15 @@ struct AABB {
     }
 
     void extend(const AABB &rhs) {
-        Vector3 vmin = min(pos, rhs.pos);
-        Vector3 vmax = max(pos + size, rhs.pos + rhs.size);
-        pos = vmin;
-        size = vmax - vmin;
+        if (size.data[0] == 0 && size.data[1] == 0 && size.data[2] == 0) {
+            pos = rhs.pos;
+            size = rhs.size;
+        } else {
+            Vector3 vmin = min(pos, rhs.pos);
+            Vector3 vmax = max(pos + size, rhs.pos + rhs.size);
+            pos = vmin;
+            size = vmax - vmin;
+        }
     }
 };
 
@@ -245,9 +250,11 @@ struct Triangle : public Primitive {
 
         float dist = v0v2.dot(qvec) * invDet;
         if (dist < 0) return res;
-        res.hit = IntersectionResult::HIT;
+        res.hit = ray.direction.dot(normal) > 0 ? IntersectionResult::INSIDE : IntersectionResult::HIT;
         res.distance = dist;
         return res;
+//        if (dist < 0) return {.hit = IntersectionResult::INSIDE, .distance = dist};
+//        return {.hit = IntersectionResult::HIT, .distance = dist};
     }
 
     Vector3 get_normal(const Vector3 &pos) const override {
@@ -328,29 +335,6 @@ struct Box : public Primitive {
 };
 
 
-struct Body {
-    std::vector<Triangle*> triangles;
-    Body(): triangles() {}
-    void set_material(const Material &m) { for (Triangle* t : triangles) t->material = m; }
-
-    void scale(float k) {
-        for (Triangle* t : triangles) {
-            t->v0 *= k;
-            t->v1 *= k;
-            t->v2 *= k;
-        }
-    }
-
-    void offset(const Vector3 &offset) {
-        for (Triangle* t : triangles) {
-            t->v0 += offset;
-            t->v1 += offset;
-            t->v2 += offset;
-        }
-    }
-};
-
-
 struct FindNearestResult {
     IntersectionResult::HitType hit = IntersectionResult::MISS;
     float distance = std::numeric_limits<float>::max();
@@ -395,7 +379,7 @@ struct KDTree {
     }
 
     FindNearestResult find_nearest(const Ray &ray) const {
-        return find_nearest(ray, root);
+        return find_nearest(ray, root, std::numeric_limits<float>::max());
     }
 
 private:
@@ -438,18 +422,49 @@ private:
         return node;
     }
 
-    FindNearestResult find_nearest(const Ray &ray, Node *node) const {
+    FindNearestResult find_nearest(const Ray &ray, Node *node, float opt_dist) const {
         FindNearestResult res;
         IntersectionResult ibox = node->bbox.intersect(ray);
         if (ibox.hit == IntersectionResult::MISS) return res;
+        if (ibox.distance > opt_dist) return res;
         if (node->child[0] || node->child[1]) {
-            res.update(find_nearest(ray, node->child[0]));
-            res.update(find_nearest(ray, node->child[1]));
-            return res;
+            res.update(find_nearest(ray, node->child[0], opt_dist));
+            opt_dist = std::min(opt_dist, res.distance);
+            res.update(find_nearest(ray, node->child[1], opt_dist));
+        } else {
+            for (const Triangle *t : node->triangles)
+                res.update(t->intersect(ray), t);
         }
-        for (const Triangle *t : node->triangles)
-            res.update(t->intersect(ray), t);
         return res;
+    }
+};
+
+
+struct Body {
+    std::vector<Triangle*> triangles;
+    KDTree kdtree;
+    Body(): triangles(), kdtree() {}
+    void set_material(const Material &m) { for (Triangle* t : triangles) t->material = m; }
+
+    void scale(float k) {
+        for (Triangle* t : triangles) {
+            t->v0 *= k;
+            t->v1 *= k;
+            t->v2 *= k;
+        }
+    }
+
+    void offset(const Vector3 &offset) {
+        for (Triangle* t : triangles) {
+            t->v0 += offset;
+            t->v1 += offset;
+            t->v2 += offset;
+        }
+    }
+
+    void build() {
+        std::vector<const Triangle*> v(triangles.begin(), triangles.end());
+        kdtree.build(v);
     }
 };
 
@@ -459,13 +474,10 @@ struct Scene {
     std::vector<Primitive*> lights;
     std::vector<Primitive*> primitives;
     std::vector<Body*> bodies;
-    KDTree kdtree;
 
     void build() {
-        std::vector<const Triangle*> v;
-        for (const Body *body : bodies)
-            v.insert(v.end(), body->triangles.begin(), body->triangles.end());
-        kdtree.build(v);
+        for (Body *body : bodies)
+            body->build();
     }
 
     void add(Primitive *p) {

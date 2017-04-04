@@ -183,10 +183,9 @@ void show_toolbox_body() {
 
 
 void show_toolbox_window() {
-    static bool flag_show_toolbox_render = true;
     ImGui::Begin("Toolbox");
     show_toolbox_info();
-    if (ImGui::CollapsingHeader("Render", &flag_show_toolbox_render)) show_toolbox_render();
+    if (ImGui::CollapsingHeader("Render", ImGuiTreeNodeFlags_DefaultOpen)) show_toolbox_render();
     if (ImGui::CollapsingHeader("Scene")) show_toolbox_scene();
     if (ImGui::CollapsingHeader("Body")) show_toolbox_body();
     ImGui::End();
@@ -212,7 +211,7 @@ int main(int argc, char** argv)
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
     SDL_DisplayMode current;
     SDL_GetCurrentDisplayMode(0, &current);
-    SDL_Window *window = SDL_CreateWindow("ImGui SDL2+OpenGL3 example", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
+    SDL_Window *window = SDL_CreateWindow("https://github.com/abcdabcd987/ray-tracing", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
     SDL_GLContext glcontext = SDL_GL_CreateContext(window);
     gl3wInit();
 
@@ -236,8 +235,8 @@ int main(int argc, char** argv)
     width = 800, height = 600;
 //    render_width = static_cast<int>(width * scale.x);
 //    render_height = static_cast<int>(height * scale.y);
-    render_width = 200;
-    render_height = 150;
+    render_width = 800;
+    render_height = 600;
     data = new uint8_t[render_width * render_height * 3];
     memset(data, 0, sizeof(*data) * render_width * render_height * 3);
     glGenTextures(1, &tex);
@@ -248,8 +247,8 @@ int main(int argc, char** argv)
 
 
     add_scene2(tracer);
-    config.num_light_sample_per_unit = 1.f;
-    config.num_trace_depth = 2;
+    config.num_light_sample_per_unit = 56.f;
+    config.num_trace_depth = 4;
     config.num_diffuse_reflect_sample = 1;
     config.num_worker = std::thread::hardware_concurrency();
     status = WAIT_TO_RENDER;
@@ -292,12 +291,12 @@ int main(int argc, char** argv)
         }
         ImGui_ImplSdlGL3_NewFrame(window);
 
-        // 3. Show the ImGui test window. Most of the sample code is in ImGui::ShowTestWindow()
-        if (show_test_window)
-        {
-            ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiSetCond_FirstUseEver);
-            ImGui::ShowTestWindow(&show_test_window);
-        }
+//        // 3. Show the ImGui test window. Most of the sample code is in ImGui::ShowTestWindow()
+//        if (show_test_window)
+//        {
+//            ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiSetCond_FirstUseEver);
+//            ImGui::ShowTestWindow(&show_test_window);
+//        }
 
         show_image_window();
         show_toolbox_window();

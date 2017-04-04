@@ -28,9 +28,14 @@ struct RayTracer {
 
     FindNearestResult find_nearest(const Ray &ray) const {
         FindNearestResult res;
+        // use kdtree:
         for (const Primitive *pr : scene.primitives)
             res.update(pr->intersect(ray), pr);
-        res.update(scene.kdtree.find_nearest(ray));
+        for (Body *body : scene.bodies)
+            res.update(body->kdtree.find_nearest(ray));
+//        // use brute force:
+//        for (const Primitive *pr : scene.all_primitives)
+//            res.update(pr->intersect(ray), pr);
         return res;
     }
 
@@ -160,7 +165,7 @@ struct RayTracer {
             float cosI = -Nd.dot(ray.direction);
             float cosT2 = 1.f - n * n * (1.f - cosI * cosI);
             if (cosT2 > 0) {
-                Vector3 T = n * ray.direction + (n * cosI - sqrtf(cosT2)) * N;
+                Vector3 T = n * ray.direction + (n * cosI - sqrtf(cosT2)) * Nd;
                 Ray ray_refract(pi + T * EPS, T);
                 TraceConfig config_importance = config;
                 config_importance.num_light_sample_per_unit *= 0.5;
@@ -176,7 +181,7 @@ struct RayTracer {
         return res;
     }
 
-    // TODO: camera position, screen position, z direction
+    // TODO: camera position, scre  en position, z direction
     bool render(uint8_t *out, int width, int height, const TraceConfig &config) {
         flag_to_stop = false;
         flag_stopped = false;
@@ -208,6 +213,7 @@ struct RayTracer {
 
         auto start = std::chrono::high_resolution_clock::now();
         std::vector<std::pair<int, int>> xys;
+//        xys.emplace_back(157, 435);
         for (int y = 0; y < height; ++y)
             for (int x = 0; x < width; ++x)
                 xys.emplace_back(x, y);
