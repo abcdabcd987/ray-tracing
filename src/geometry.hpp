@@ -1,6 +1,7 @@
 #pragma once
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 constexpr float EPS = 1e-4;
@@ -26,7 +27,7 @@ struct Vector3 {
     friend Vector3 operator*(Vector3 u, float k) { return u *= k; }
     friend Vector3 operator*(float k, Vector3 u) { return u *= k; }
     friend Vector3 operator/(Vector3 u, float k) { return u /= k; }
-    friend Vector3 expf(const Vector3& v) { return Vector3(std::expf(v.x), std::expf(v.y), std::expf(v.z)); }
+    friend Vector3 expf(const Vector3& v) { return Vector3(::expf(v.x), ::expf(v.y), ::expf(v.z)); }
     friend Vector3 min(const Vector3& u, const Vector3 &v) {
         return Vector3(std::min(u.x, v.x), std::min(u.y, v.y), std::min(u.z, v.z));
     }
@@ -200,10 +201,10 @@ struct Sphere : public Primitive {
             float phi = randf() * static_cast<float>(M_PI);
             float cos_theta =  randf() * 2.f - 1.f;
             float u = randf();
-            float theta = std::acos(cos_theta);
+            float theta = acos(cos_theta);
             float r = radius * std::cbrtf(u);
-            float x = r * std::sinf(theta) * std::cosf(phi);
-            float y = r * std::sinf(theta) * std::sinf(phi);
+            float x = r * sinf(theta) * cosf(phi);
+            float y = r * sinf(theta) * sinf(phi);
             float z = r * cos_theta;
             light_samples[i] = Vector3(x, y, z);
         }
@@ -279,7 +280,7 @@ struct Triangle : public Primitive {
             // see: http://math.stackexchange.com/questions/18686/uniform-random-point-in-triangle
             Vector3 v0v1 = v1 - v0;
             Vector3 v0v2 = v2 - v0;
-            float sqrt_r1 = std::sqrtf(randf()), r2 = randf();
+            float sqrt_r1 = sqrtf(randf()), r2 = randf();
             light_samples[i] = sqrt_r1 * (1.f - r2) * v0v1 + r2 * sqrt_r1 * v0v2;
         }
     }
@@ -509,13 +510,13 @@ struct Scene {
                 body->triangles.emplace_back(triangle);
                 add(triangle);
             } else if (buf[0] == '#'
-                    || strcmp(buf, "mtllib") == 0
-                    || strcmp(buf, "vn") == 0
-                    || strcmp(buf, "vt") == 0
-                    || strcmp(buf, "s") == 0
-                    || strcmp(buf, "g") == 0
-                    || strcmp(buf, "o") == 0
-                    || strcmp(buf, "usemtl") == 0) {
+                       || strcmp(buf, "mtllib") == 0
+                       || strcmp(buf, "vn") == 0
+                       || strcmp(buf, "vt") == 0
+                       || strcmp(buf, "s") == 0
+                       || strcmp(buf, "g") == 0
+                       || strcmp(buf, "o") == 0
+                       || strcmp(buf, "usemtl") == 0) {
                 // not supported
                 while (fgetc(f) != '\n');
             } else {

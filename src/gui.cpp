@@ -231,10 +231,7 @@ int main(int argc, char** argv)
     bool show_test_window = true;
     ImVec4 clear_color = ImColor(114, 144, 154).Value;
 
-    const auto scale = ImGui::GetIO().DisplayFramebufferScale;
     width = 800, height = 600;
-//    render_width = static_cast<int>(width * scale.x);
-//    render_height = static_cast<int>(height * scale.y);
     render_width = 800;
     render_height = 600;
     data = new uint8_t[render_width * render_height * 3];

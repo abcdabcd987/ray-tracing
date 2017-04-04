@@ -1,18 +1,16 @@
 #pragma once
 #include "raytracer.hpp"
 
-// Don't care about the memory leak
-
 void add_scene1(RayTracer &tracer) {
     Material def_material = {
             .color = Color(.2f, .2f, .2f),
-            .k_specular = .8f,
-            .k_ambient = 0,
-            .k_refract_index = 1.5f,
-            .k_refract = 0,
-            .k_diffuse = 0.2f,
             .k_reflect = 0,
+            .k_diffuse = 0.2f,
             .k_diffuse_reflect = 0,
+            .k_specular = .8f,
+            .k_refract = 0,
+            .k_refract_index = 1.5f,
+            .k_ambient = 0,
     };
 
     // ground plane
@@ -88,33 +86,33 @@ void add_scene1(RayTracer &tracer) {
 void add_scene2(RayTracer &tracer) {
     Material plane_material = {
             .color = Color(.4f, .3f, .3f),
-            .k_specular = .2f,
-            .k_ambient = 0,
-            .k_refract_index = 1.f,
-            .k_refract = 0,
-            .k_diffuse = 1.0f,
             .k_reflect = 0.2f,
+            .k_diffuse = 1.0f,
             .k_diffuse_reflect = 0.0f,
+            .k_specular = .2f,
+            .k_refract = 0,
+            .k_refract_index = 1.f,
+            .k_ambient = 0,
     };
     Material light_material = {
             .color = Color(1, 1, 1),
-            .k_specular = 0.f,
-            .k_ambient = 0,
-            .k_refract_index = 1.f,
-            .k_refract = 1.f,
-            .k_diffuse = 1.f,
             .k_reflect = 0.f,
+            .k_diffuse = 1.f,
             .k_diffuse_reflect = 0.f,
+            .k_specular = 0.f,
+            .k_refract = 1.f,
+            .k_refract_index = 1.f,
+            .k_ambient = 0,
     };
     Material def_material = {
             .color = Color(.2f, .2f, .2f),
-            .k_specular = .8f,
-            .k_ambient = 0,
-            .k_refract_index = 1.5f,
-            .k_refract = 0,
-            .k_diffuse = 0.2f,
             .k_reflect = 0,
+            .k_diffuse = 0.2f,
             .k_diffuse_reflect = 0,
+            .k_specular = .8f,
+            .k_refract = 0,
+            .k_refract_index = 1.5f,
+            .k_ambient = 0,
     };
 
     Material m;
@@ -228,13 +226,13 @@ void add_scene2(RayTracer &tracer) {
 
     Material teapot_material = {
             .color = Color(1, 1, 1),
-            .k_specular = 0.5f,
-            .k_ambient = 0,
-            .k_refract_index = 1.f,
-            .k_refract = 0.0f,
-            .k_diffuse = 0.5f,
             .k_reflect = 0.2f,
+            .k_diffuse = 0.5f,
             .k_diffuse_reflect = 0.0f,
+            .k_specular = 0.5f,
+            .k_refract = 0.0f,
+            .k_refract_index = 1.f,
+            .k_ambient = 0,
     };
 //    body = tracer.scene.load_obj("../models/teapot.obj");
 //    body->set_material(teapot_material);
@@ -243,13 +241,13 @@ void add_scene2(RayTracer &tracer) {
 
     Material sphere_material = {
             .color = Color(.7f, .8f, .9f),
-            .k_specular = 0.1f,
-            .k_ambient = 0,
-            .k_refract_index = 1.f,
-            .k_refract = 0.0f,
-            .k_diffuse = 0.9f,
             .k_reflect = 0.0f,
+            .k_diffuse = 0.9f,
             .k_diffuse_reflect = 0.0f,
+            .k_specular = 0.1f,
+            .k_refract = 0.0f,
+            .k_refract_index = 1.f,
+            .k_ambient = 0,
     };
 //    body = tracer.scene.load_obj("../models/sphere.obj");
 //    body->set_material(sphere_material);
