@@ -265,7 +265,7 @@ int main(int argc, char** argv)
                 bool success = tracer.render(data, image_width, image_height, config);
                 time_render_end = std::chrono::high_resolution_clock::now();
                 if (success)
-                    save_ppm("/tmp/ray-tracing.ppm", data, width, height);
+                    save_png("/tmp/ray-tracing.png", data, width, height);
                 else if (status == EXIT_RENDER)
                     return;
                 status = RENDERED;

@@ -48,6 +48,6 @@ int main(int argc, char** argv) {
     RayTracer tracer;
     add_scene2(tracer);
     tracer.render(data, width, height, config);
-    save_ppm(out, data, width, height);
+    save_png(out, data, width, height);
     delete [] data;
 }

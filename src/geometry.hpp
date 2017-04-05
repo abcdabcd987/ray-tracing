@@ -1,51 +1,105 @@
 #pragma once
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <vector>
+#include <png.h>
 
 constexpr float EPS = 1e-4;
 
 struct Vector3 {
     union {
-        struct { float x, y, z; };
-        struct { float r, g, b; };
+        struct {
+            float x, y, z;
+        };
+        struct {
+            float r, g, b;
+        };
         float data[3];
     };
+
     Vector3() : x(0), y(0), z(0) {}
+
     Vector3(float xx, float yy, float zz) : x(xx), y(yy), z(zz) {}
-    Vector3& operator+=(const Vector3 &v) { x += v.x, y += v.y, z += v.z; return *this; }
-    Vector3& operator-=(const Vector3 &v) { x -= v.x, y -= v.y, z -= v.z; return *this; }
-    Vector3& operator*=(const Vector3 &v) { x *= v.x, y *= v.y, z *= v.z; return *this; }
-    Vector3& operator/=(const Vector3 &v) { x /= v.x, y /= v.y, z /= v.z; return *this; }
-    Vector3& operator*=(float k) { x *= k; y *= k; z *= k; return *this; }
-    Vector3& operator/=(float k) { x /= k; y /= k; z /= k; return *this; }
+
+    Vector3 &operator+=(const Vector3 &v) {
+        x += v.x, y += v.y, z += v.z;
+        return *this;
+    }
+
+    Vector3 &operator-=(const Vector3 &v) {
+        x -= v.x, y -= v.y, z -= v.z;
+        return *this;
+    }
+
+    Vector3 &operator*=(const Vector3 &v) {
+        x *= v.x, y *= v.y, z *= v.z;
+        return *this;
+    }
+
+    Vector3 &operator/=(const Vector3 &v) {
+        x /= v.x, y /= v.y, z /= v.z;
+        return *this;
+    }
+
+    Vector3 &operator*=(float k) {
+        x *= k;
+        y *= k;
+        z *= k;
+        return *this;
+    }
+
+    Vector3 &operator/=(float k) {
+        x /= k;
+        y /= k;
+        z /= k;
+        return *this;
+    }
+
     friend Vector3 operator+(Vector3 u, const Vector3 &v) { return u += v; }
+
     friend Vector3 operator-(Vector3 u, const Vector3 &v) { return u -= v; }
+
     friend Vector3 operator*(Vector3 u, const Vector3 &v) { return u *= v; }
+
     friend Vector3 operator/(Vector3 u, const Vector3 &v) { return u /= v; }
+
     friend Vector3 operator*(Vector3 u, float k) { return u *= k; }
+
     friend Vector3 operator*(float k, Vector3 u) { return u *= k; }
+
     friend Vector3 operator/(Vector3 u, float k) { return u /= k; }
-    friend Vector3 expf(const Vector3& v) { return Vector3(::expf(v.x), ::expf(v.y), ::expf(v.z)); }
-    friend Vector3 min(const Vector3& u, const Vector3 &v) {
+
+    friend Vector3 expf(const Vector3 &v) { return Vector3(::expf(v.x), ::expf(v.y), ::expf(v.z)); }
+
+    friend Vector3 min(const Vector3 &u, const Vector3 &v) {
         return Vector3(std::min(u.x, v.x), std::min(u.y, v.y), std::min(u.z, v.z));
     }
-    friend Vector3 max(const Vector3& u, const Vector3 &v) {
+
+    friend Vector3 max(const Vector3 &u, const Vector3 &v) {
         return Vector3(std::max(u.x, v.x), std::max(u.y, v.y), std::max(u.z, v.z));
     }
+
     Vector3 operator-() const { return Vector3(-x, -y, -z); }
+
     float dot(const Vector3 &v) const { return x * v.x + y * v.y + z * v.z; }
+
     Vector3 cross(const Vector3 &v) const { return Vector3(y * v.z - z * v.y, z * v.x - x * v.z, x * v.y - y * v.x); }
+
     float length2() const { return dot(*this); }
+
     float length() const { return sqrtf(length2()); }
+
     Vector3 normalized() const {
         const float len = length();
         return Vector3(x / len, y / len, z / len);
     }
 };
+
 typedef Vector3 Color;
 
+inline bool read_png_file(const char *filename, Color *(&out), int &width, int &height);
 
 inline float randf() {
     return rand() / static_cast<float>(RAND_MAX);
@@ -55,13 +109,16 @@ inline float randf() {
 struct Ray {
     Vector3 origin;
     Vector3 direction;
+
     Ray(const Vector3 &origin, const Vector3 &direction_) :
             origin(origin), direction(direction_.normalized()) {}
 };
 
 
 struct IntersectionResult {
-    enum HitType {MISS, HIT, INSIDE} hit;
+    enum HitType {
+        MISS, HIT, INSIDE
+    } hit;
     float distance;
 };
 
@@ -70,10 +127,11 @@ struct AABB {
     Vector3 pos;
     Vector3 size;
 
-    AABB(): pos(), size() {}
-    AABB(const Vector3 &pos_, const Vector3& size_): pos(pos_), size(size_) {}
+    AABB() : pos(), size() {}
 
-    bool intersect(const AABB& rhs) const {
+    AABB(const Vector3 &pos_, const Vector3 &size_) : pos(pos_), size(size_) {}
+
+    bool intersect(const AABB &rhs) const {
         Vector3 v1 = rhs.pos, v2 = rhs.pos + rhs.size;
         Vector3 v3 = pos, v4 = pos + size;
         return ((v4.x > v1.x) && (v3.x < v2.x) &&
@@ -127,6 +185,69 @@ struct AABB {
 };
 
 
+struct Texture {
+    virtual Color get_color(float u, float v) const = 0;
+    virtual ~Texture() {}
+};
+
+
+struct GridTexture : public Texture {
+    Color c0, c1;
+
+    GridTexture(const Color &c0, const Color &c1) : c0(c0), c1(c1) {}
+
+    Color get_color(float u, float v) const override {
+        int a1 = (static_cast<int>(u) & 1) == 0;
+        int a2 = (static_cast<int>(v) & 1) == 0;
+        if (u < 0) a1 ^= 1;
+        if (v < 0) a2 ^= 1;
+        return (a1 ^ a2) ? c0 : c1;
+    }
+};
+
+
+struct PNGTexture : public Texture {
+    int width, height;
+    Color *img;
+
+    PNGTexture(const char *filename): img(nullptr), width(0), height(0) {
+        bool success = read_png_file(filename, img, width, height);
+        if (!success)
+            fprintf(stderr, "failed to load texture file: %s\n", filename);
+    }
+
+    Color get_color(float u, float v) const override {
+        if (!img) return Color(1, 1, 1);
+        // fetch a bilinearly filtered texel
+        float fu = (u + 1000.5f) * width;
+        float fv = (v + 1000.0f) * height;
+        int u1 = ((int)fu) % width;
+        int v1 = ((int)fv) % height;
+        int u2 = (u1 + 1) % width;
+        int v2 = (v1 + 1) % height;
+        // calculate fractional parts of u and v
+        float fracu = fu - floorf(fu);
+        float fracv = fv - floorf(fv);
+        // calculate weight factors
+        float w1 = (1 - fracu) * (1 - fracv);
+        float w2 = fracu * (1 - fracv);
+        float w3 = (1 - fracu) * fracv;
+        float w4 = fracu *  fracv;
+        // fetch four texels
+        Color c1 = img[u1 + v1 * width];
+        Color c2 = img[u2 + v1 * width];
+        Color c3 = img[u1 + v2 * width];
+        Color c4 = img[u2 + v2 * width];
+        // scale and sum the four colors
+        return c1 * w1 + c2 * w2 + c3 * w3 + c4 * w4;
+    }
+
+    ~PNGTexture() {
+        free(img);
+    }
+};
+
+
 struct Material {
     Color color;
     float k_reflect;
@@ -136,44 +257,59 @@ struct Material {
     float k_refract;
     float k_refract_index;
     float k_ambient;
+    Texture *texture;
+    float texture_uscale;
+    float texture_vscale;
 };
 
 
 struct Primitive {
-    enum Type { SPHERE, TRIANGLE, PLANE, BOX };
+    enum Type {
+        SPHERE, TRIANGLE, PLANE, BOX
+    };
     Type type;
     bool light;
     Material material;
     Vector3 *light_samples;
-    Primitive(Type type_): type(type_), light(false), material(), light_samples(nullptr) {}
-    virtual IntersectionResult intersect(const Ray& ray) const = 0;
-    virtual Vector3 get_normal(const Vector3& pos) const = 0;
+
+    Primitive(Type type_) : type(type_), light(false), material(), light_samples(nullptr) {}
+
+    virtual IntersectionResult intersect(const Ray &ray) const = 0;
+
+    virtual Vector3 get_normal(const Vector3 &pos) const = 0;
+
     virtual Color get_color(const Vector3 &pos) const { return material.color; }
+
     virtual float get_volume() const { return 0; }
-    virtual void sample_light(const float num_light_sample_per_unit) { }
+
+    virtual void sample_light(const float num_light_sample_per_unit) {}
+
     virtual int get_num_light_sample(float num_light_sample_per_unit) const {
         float volume = get_volume();
         return std::max(1, static_cast<int>(std::ceil(volume * num_light_sample_per_unit)));
     }
+
     int alloc_light_samples(float num_light_sample_per_unit) {
         int n = get_num_light_sample(num_light_sample_per_unit);
-        delete [] light_samples;
-        light_samples = static_cast<Vector3*>(::operator new(n * sizeof(Vector3)));
+        delete[] light_samples;
+        light_samples = static_cast<Vector3 *>(::operator new(n * sizeof(Vector3)));
         return n;
     }
-    virtual ~Primitive() { delete [] light_samples; }
+
+    virtual ~Primitive() { delete[] light_samples; }
 };
 
 
 struct Sphere : public Primitive {
     Vector3 center;
     float radius;
+
     Sphere(const Vector3 &center_, float radius_) :
             Primitive(SPHERE), center(center_), radius(radius_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         Vector3 v = ray.origin - center;
-        float b = - v.dot(ray.direction);
+        float b = -v.dot(ray.direction);
         float det = b * b - v.length2() + radius * radius;
         if (det > 0) {
             det = sqrtf(det);
@@ -186,7 +322,7 @@ struct Sphere : public Primitive {
         return {.hit = IntersectionResult::MISS};
     }
 
-    Vector3 get_normal(const Vector3& pos) const override {
+    Vector3 get_normal(const Vector3 &pos) const override {
         return (pos - center).normalized();
     }
 
@@ -199,15 +335,29 @@ struct Sphere : public Primitive {
         int n = alloc_light_samples(num_light_sample_per_unit);
         for (int i = 0; i < n; ++i) {
             float phi = randf() * static_cast<float>(M_PI);
-            float cos_theta =  randf() * 2.f - 1.f;
+            float cos_theta = randf() * 2.f - 1.f;
             float u = randf();
-            float theta = acos(cos_theta);
+            float theta = acosf(cos_theta);
             float r = radius * std::cbrtf(u);
             float x = r * sinf(theta) * cosf(phi);
             float y = r * sinf(theta) * sinf(phi);
             float z = r * cos_theta;
             light_samples[i] = Vector3(x, y, z);
         }
+    }
+
+    Color get_color(const Vector3 &pos) const override {
+        if (!material.texture) return material.color;
+        Vector3 vn = Vector3(0, 1, 0);
+        Vector3 ve = Vector3(1, 0, 0);
+        Vector3 vc = vn.cross(ve);
+        Vector3 vp = (pos - center) / radius;
+        float phi = acosf(-vp.dot(vn));
+        float v = phi / static_cast<float>(M_PI);
+        float theta = (acosf(ve.dot(vp) / sinf(phi))) * 2 / static_cast<float>(M_PI);
+        float u = vc.dot(vp) >= 0 ? 1 - theta : theta;
+        Color texture_color = material.texture->get_color(u * material.texture_uscale, v * material.texture_vscale);
+        return texture_color * material.color;
     }
 };
 
@@ -218,14 +368,13 @@ struct Triangle : public Primitive {
 
     Triangle(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_)
             : Primitive(TRIANGLE), v0(v0_), v1(v1_), v2(v2_),
-              normal((v1-v0).cross(v2-v0).normalized())
-    { }
+              normal((v1 - v0).cross(v2 - v0).normalized()) {}
 
     void set_vertices(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_) {
         v0 = v0_;
         v1 = v1_;
         v2 = v2_;
-        normal = (v1-v0).cross(v2-v0).normalized();
+        normal = (v1 - v0).cross(v2 - v0).normalized();
     }
 
     IntersectionResult intersect(const Ray &ray) const override {
@@ -270,7 +419,7 @@ struct Triangle : public Primitive {
 
     float get_volume() const override {
         // pretend that a triangle has a volume
-        float area = .5f * (v2-v0).cross(v1-v0).length();
+        float area = .5f * (v2 - v0).cross(v1 - v0).length();
         return area * 0.1f;
     }
 
@@ -290,13 +439,14 @@ struct Triangle : public Primitive {
 struct Plane : public Primitive {
     Vector3 normal;
     float distance;
-    Plane(const Vector3& normal_, float distance_) :
+
+    Plane(const Vector3 &normal_, float distance_) :
             Primitive(Primitive::PLANE), normal(normal_.normalized()), distance(distance_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         float d = normal.dot(ray.direction);
         if (d != 0) {
-            float dist = (normal.dot(ray.origin) + distance)  / -d;
+            float dist = (normal.dot(ray.origin) + distance) / -d;
             if (dist > 0) return {.hit = IntersectionResult::HIT, .distance = dist};
         }
         return {.hit = IntersectionResult::MISS};
@@ -305,13 +455,23 @@ struct Plane : public Primitive {
     Vector3 get_normal(const Vector3 &pos) const override {
         return normal;
     }
+
+    Color get_color(const Vector3 &pos) const override {
+        if (!material.texture) return material.color;
+        Vector3 uaxis(normal.y, normal.z, -normal.x);
+        Vector3 vaxis = uaxis.cross(normal);
+        float u = pos.dot(uaxis) * material.texture_uscale;
+        float v = pos.dot(vaxis) * material.texture_vscale;
+        Color texture_color = material.texture->get_color(u, v);
+        return texture_color * material.color;
+    }
 };
 
 
 struct Box : public Primitive {
     AABB aabb;
 
-    Box(const AABB &aabb_): Primitive(Primitive::BOX), aabb(aabb_) {}
+    Box(const AABB &aabb_) : Primitive(Primitive::BOX), aabb(aabb_) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         return aabb.intersect(ray);
@@ -340,6 +500,7 @@ struct FindNearestResult {
     IntersectionResult::HitType hit = IntersectionResult::MISS;
     float distance = std::numeric_limits<float>::max();
     const Primitive *primitive = nullptr;
+
     void update(IntersectionResult::HitType rhs_hit, float rhs_distance, const Primitive *rhs_primitive) {
         if (rhs_hit != IntersectionResult::MISS &&
             (hit == IntersectionResult::MISS || distance > rhs_distance)) {
@@ -348,9 +509,11 @@ struct FindNearestResult {
             primitive = rhs_primitive;
         }
     }
-    void update(const IntersectionResult& rhs, const Primitive *rhs_primitive) {
+
+    void update(const IntersectionResult &rhs, const Primitive *rhs_primitive) {
         update(rhs.hit, rhs.distance, rhs_primitive);
     }
+
     void update(const FindNearestResult &rhs) {
         update(rhs.hit, rhs.distance, rhs.primitive);
     }
@@ -363,18 +526,26 @@ struct FindNearestResult {
 struct KDTree {
     struct Node {
         AABB bbox;
-        Node* child[2];
-        std::vector<const Triangle*> triangles;
-        Node(): bbox(), child(), triangles() {}
-        ~Node() { delete child[0]; delete child[1]; }
+        Node *child[2];
+        std::vector<const Triangle *> triangles;
+
+        Node() : bbox(), child(), triangles() {}
+
+        ~Node() {
+            delete child[0];
+            delete child[1];
+        }
     };
+
     Node *root;
     static constexpr int NUM_LEAF_OBJS = 8;
     static constexpr int NUM_MAX_DEPTH = 32;
-    KDTree(): root(nullptr) {}
+
+    KDTree() : root(nullptr) {}
+
     ~KDTree() { delete root; }
 
-    void build(const std::vector<const Triangle*> &triangles) {
+    void build(const std::vector<const Triangle *> &triangles) {
         delete root;
         root = build(triangles, 0);
     }
@@ -385,7 +556,7 @@ struct KDTree {
 
 private:
 
-    float get_split_plane_naive(const std::vector<const Triangle*> &triangles, int axis) const {
+    float get_split_plane_naive(const std::vector<const Triangle *> &triangles, int axis) const {
         float sum = 0;
         for (const Triangle *t : triangles) {
             sum += t->v0.data[axis];
@@ -395,7 +566,7 @@ private:
         return sum / (3 * triangles.size());
     }
 
-    Node *build(const std::vector<const Triangle*> &triangles, int depth) const {
+    Node *build(const std::vector<const Triangle *> &triangles, int depth) const {
         Node *node = new Node();
         for (const Triangle *t : triangles)
             node->bbox.extend(t->get_bounding_box());
@@ -403,7 +574,7 @@ private:
             int axis = depth % 3;
             float plane = get_split_plane_naive(triangles, axis);
             int common = 0;
-            std::vector<const Triangle*> lef, rig;
+            std::vector<const Triangle *> lef, rig;
             for (const Triangle *t : triangles) {
                 bool in_lef = t->v0.data[axis] <= plane || t->v1.data[axis] <= plane || t->v2.data[axis] <= plane;
                 bool in_rig = t->v0.data[axis] >= plane || t->v1.data[axis] >= plane || t->v2.data[axis] >= plane;
@@ -442,13 +613,15 @@ private:
 
 
 struct Body {
-    std::vector<Triangle*> triangles;
+    std::vector<Triangle *> triangles;
     KDTree kdtree;
-    Body(): triangles(), kdtree() {}
-    void set_material(const Material &m) { for (Triangle* t : triangles) t->material = m; }
+
+    Body() : triangles(), kdtree() {}
+
+    void set_material(const Material &m) { for (Triangle *t : triangles) t->material = m; }
 
     void scale(float k) {
-        for (Triangle* t : triangles) {
+        for (Triangle *t : triangles) {
             t->v0 *= k;
             t->v1 *= k;
             t->v2 *= k;
@@ -456,7 +629,7 @@ struct Body {
     }
 
     void offset(const Vector3 &offset) {
-        for (Triangle* t : triangles) {
+        for (Triangle *t : triangles) {
             t->v0 += offset;
             t->v1 += offset;
             t->v2 += offset;
@@ -464,17 +637,17 @@ struct Body {
     }
 
     void build() {
-        std::vector<const Triangle*> v(triangles.begin(), triangles.end());
+        std::vector<const Triangle *> v(triangles.begin(), triangles.end());
         kdtree.build(v);
     }
 };
 
 
 struct Scene {
-    std::vector<Primitive*> all_primitives;
-    std::vector<Primitive*> lights;
-    std::vector<Primitive*> primitives;
-    std::vector<Body*> bodies;
+    std::vector<Primitive *> all_primitives;
+    std::vector<Primitive *> lights;
+    std::vector<Primitive *> primitives;
+    std::vector<Body *> bodies;
 
     void build() {
         for (Body *body : bodies)
@@ -487,7 +660,7 @@ struct Scene {
         if (p->light) lights.emplace_back(p);
     }
 
-    Body* load_obj(const char *path) {
+    Body *load_obj(const char *path) {
         FILE *f = fopen(path, "r");
         if (!f) return nullptr;
 
@@ -545,15 +718,124 @@ inline void color_save_to_array(uint8_t *out, const Color &color) {
 
 inline void save_ppm(const char *path, uint8_t *data, int width, int height) {
     FILE *f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "failed to save ppm file to: %s\n", path);
+        return;
+    }
     fprintf(f, "P3\n");
     fprintf(f, "%d %d\n", width, height);
     fprintf(f, "255\n");
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
             int i = (y * width + x) * 3;
-            fprintf(f, "%u\t%u\t%u\t", data[i], data[i+1], data[i+2]);
+            fprintf(f, "%u\t%u\t%u\t", data[i], data[i + 1], data[i + 2]);
         }
         fprintf(f, "\n");
     }
     fclose(f);
+}
+
+inline Vector3 uniform_sample_hemisphere() {
+    // cos(theta) = u1 = y
+    // cos^2(theta) + sin^2(theta) = 1 -> sin(theta) = srtf(1 - cos^2(theta))
+    float r1 = randf();
+    float r2 = randf();
+    float sinTheta = sqrtf(1 - r1 * r1);
+    float phi = 2 * static_cast<float>(M_PI) * r2;
+    float x = sinTheta * cosf(phi);
+    float z = sinTheta * sinf(phi);
+    return Vector3(x, r1, z);
+}
+
+// ref: https://gist.github.com/niw/5963798
+inline bool read_png_file(const char *filename, Color *(&out), int &width, int &height) {
+    // read png
+    FILE *fp = fopen(filename, "rb");
+    png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if(!png) return false;
+    png_infop info = png_create_info_struct(png);
+    if(!info) return false;
+    if(setjmp(png_jmpbuf(png))) return false;
+    png_init_io(png, fp);
+    png_read_info(png, info);
+    width = static_cast<int>(png_get_image_width(png, info));
+    height = static_cast<int>(png_get_image_height(png, info));
+    png_byte color_type = png_get_color_type(png, info);
+    png_byte bit_depth  = png_get_bit_depth(png, info);
+    if(bit_depth == 16) png_set_strip_16(png);
+    if(color_type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
+    if(color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) png_set_expand_gray_1_2_4_to_8(png);
+    if(png_get_valid(png, info, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png);
+    if(color_type == PNG_COLOR_TYPE_RGB ||
+       color_type == PNG_COLOR_TYPE_GRAY ||
+       color_type == PNG_COLOR_TYPE_PALETTE)
+        png_set_filler(png, 0xFF, PNG_FILLER_AFTER);
+    if(color_type == PNG_COLOR_TYPE_GRAY ||
+       color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+        png_set_gray_to_rgb(png);
+    png_read_update_info(png, info);
+    png_bytep *row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
+    for(int y = 0; y < height; y++)
+        row_pointers[y] = (png_byte*)malloc(png_get_rowbytes(png,info));
+    png_read_image(png, row_pointers);
+
+    // save to Color array
+    out = static_cast<Color *>(malloc(sizeof(Color) * width * height));
+    for (int y = 0, k = 0; y < height; ++y) {
+        png_byte *row = row_pointers[y];
+        for (int x = 0; x < width; ++x, ++k) {
+            png_byte *rgba = &row[x * 4];
+            out[k].r = rgba[0] / 255.0f;
+            out[k].g = rgba[1] / 255.0f;
+            out[k].b = rgba[2] / 255.0f;
+        }
+    }
+
+    // clean up
+    for (int y = 0; y < height; ++y)
+        free(row_pointers[y]);
+    free(row_pointers);
+    fclose(fp);
+    return true;
+}
+
+// ref: https://gist.github.com/niw/5963798
+inline bool _save_png(const char *path, uint8_t *data, int width, int height) {
+    FILE *fp = fopen(path, "w");
+    if (!fp) return false;
+    png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    if (!png) return false;
+    png_infop info = png_create_info_struct(png);
+    if (!info) return false;
+    if (setjmp(png_jmpbuf(png))) return false;
+    png_init_io(png, fp);
+    png_set_IHDR(png, info, (png_uint_32) width, (png_uint_32)height, 8,
+                 PNG_COLOR_TYPE_RGBA,
+                 PNG_INTERLACE_NONE,
+                 PNG_COMPRESSION_TYPE_DEFAULT,
+                 PNG_FILTER_TYPE_DEFAULT);
+    png_write_info(png, info);
+    png_bytep *row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
+    for(int y = 0; y < height; y++) {
+        row_pointers[y] = (png_byte *) malloc(png_get_rowbytes(png, info));
+        png_byte *row = row_pointers[y];
+        for (int x = 0; x < width; ++x) {
+            png_byte *dst = &row[x * 4];
+            uint8_t *src = &data[(y * width + x) * 3];
+            dst[0] = src[0], dst[1] = src[1], dst[2] = src[2];
+            dst[3] = 255;
+        }
+    }
+    png_write_image(png, row_pointers);
+    png_write_end(png, NULL);
+    for(int y = 0; y < height; y++)
+        free(row_pointers[y]);
+    free(row_pointers);
+    fclose(fp);
+    return true;
+}
+
+inline void save_png(const char *path, uint8_t *data, int width, int height) {
+    if (!_save_png(path, data, width, height))
+        fprintf(stderr, "failed to save png file to: %s\n", path);
 }

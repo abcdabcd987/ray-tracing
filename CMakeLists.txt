@@ -7,27 +7,17 @@ set(CMAKE_CXX_FLAGS "-O3")
 
 include_directories(vendor/concurrentqueue)
 
+find_package(PNG REQUIRED)
+include_directories(${PNG_INCLUDE_DIR})
+
 add_executable(raytracer-cli src/cli.cpp ${SOURCE_CODE})
+target_link_libraries(raytracer-cli ${PNG_LIBRARY})
 
 if(GUI)
     include(FindPkgConfig)
     cmake_policy(SET CMP0004 OLD) # leading or trailing whitespace????
-    find_package(OpenGL QUIET)
-    find_package(SDL2 QUIET)
-    if(APPLE)
-        set(MESSAGE_OPENGL_NOTFOUND "brew install glfw")
-        set(MESSAGE_SDL2_NOTFOUND "brew install sdl2")
-    elseif(UNIX)
-        set(MESSAGE_OPENGL_NOTFOUND "sudo apt install freeglut3-dev")
-        set(MESSAGE_SDL2_NOTFOUND "sudo apt install libsdl2-dev")
-    endif()
-    set(MESSAGE_NOGUI "Or maybe `cmake -DNOGUI=OFF ..` to disable GUI.")
-    if(NOT ${SDL2_FOUND})
-        message(FATAL_ERROR "SDL2 not found. Maybe try `${MESSAGE_SDL2_NOTFOUND}`? ${MESSAGE_NOGUI}")
-    endif()
-    if(NOT ${OpenGL_FOUND})
-        message(FATAL_ERROR "OpenGL not found. Maybe try `${MESSAGE_OPENGL_NOTFOUND}`? ${MESSAGE_NOGUI}")
-    endif()
+    find_package(OpenGL REQUIRED)
+    find_package(SDL2 REQUIRED)
 
     include_directories(${SDL2_INCLUDE_DIRS} ${OPENGL_INCLUDE_DIR})
     set(IMGUI_SRC
@@ -41,7 +31,7 @@ if(GUI)
             vendor/imgui/examples/libs/gl3w
             vendor/imgui/examples/sdl_opengl3_example)
     add_executable(raytracer-gui src/gui.cpp ${IMGUI_SRC})
-    target_link_libraries(raytracer-gui ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES})
+    target_link_libraries(raytracer-gui ${SDL2_LIBRARIES} ${OPENGL_LIBRARIES} ${PNG_LIBRARY})
     if(APPLE)
         find_library(FRAMEWORK_CORE_FOUNDATION CoreFoundation)
         find_library(FRAMEWORK_OPENGL OpenGl)

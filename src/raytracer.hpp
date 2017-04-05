@@ -95,6 +95,7 @@ struct RayTracer {
         // if normal object
         Vector3 pi = ray.origin + ray.direction * res.distance; // intersection point
         Vector3 N = res.primitive->get_normal(pi);
+        Color color_pi = res.primitive->get_color(pi);
         for (const Primitive *light : scene.lights) {
             // shadow
             CalcShadeResult res_shade = calc_shade(light, pi, config);
@@ -107,7 +108,7 @@ struct RayTracer {
                 if (k_diffuse > 0) {
                     float dot = N.dot(L);
                     if (dot > 0)
-                        res.color += dot * k_diffuse * shade * res.primitive->material.color * light->material.color;
+                        res.color += dot * k_diffuse * shade * color_pi * light->material.color;
                 }
 
                 // specular shading
@@ -134,14 +135,25 @@ struct RayTracer {
                 TraceConfig config_importance = config;
                 config_importance.num_light_sample_per_unit *= 0.25;
                 for (int i = 0; i < config.num_diffuse_reflect_sample; ++i) {
-                    float len = randf() * k_diffuse_reflect;
-                    float angle = static_cast<float>(randf() * 2 * M_PI);
-                    float xoff = len * cosf(angle), yoff = len * sinf(angle);
-                    Vector3 R = (RP + RN1 * xoff + RN2 * yoff * k_diffuse_reflect).normalized();
+//                    float len = randf() * k_diffuse_reflect;
+//                    float angle = static_cast<float>(randf() * 2 * M_PI);
+//                    float xoff = len * cosf(angle), yoff = len * sinf(angle);
+//                    Vector3 R = (RP + RN1 * xoff + RN2 * yoff * k_diffuse_reflect).normalized();
+                    Vector3 Nx, Nz, Ny = N;
+                    if (fabsf(Ny.x) > fabs(Ny.y)) Nx = Vector3(Ny.z, 0, -Ny.x);
+                    else Nx = Vector3(0, -Ny.z, Ny.y);
+                    Nx = Nx.normalized();
+                    Nz = Ny.cross(Nx).normalized();
+                    Vector3 sample = uniform_sample_hemisphere();
+                    Vector3 R = Vector3(
+                            sample.x * Nx.x + sample.y * Ny.x + sample.z * Nz.x,
+                            sample.x * Nx.y + sample.y * Ny.y + sample.z * Nz.y,
+                            sample.x * Nx.z + sample.y * Ny.z + sample.z * Nz.z
+                    );
                     Ray ray_reflect(pi + R * EPS, R);
                     RayTraceResult r = ray_trace(ray_reflect, refract_index, depth + 1, config_importance);
                     if (r.hit)
-                        c += k_reflect * r.color * res.primitive->material.color;
+                        c += k_reflect * r.color * color_pi;
                 }
                 res.color += c / config.num_diffuse_reflect_sample;
             } else {
@@ -152,7 +164,7 @@ struct RayTracer {
                 config_importance.num_light_sample_per_unit *= 0.5;
                 RayTraceResult r = ray_trace(ray_reflect, refract_index, depth + 1, config_importance);
                 if (r.hit)
-                    res.color += k_reflect * r.color * res.primitive->material.color;
+                    res.color += k_reflect * r.color * color_pi;
             }
         }
 
@@ -171,8 +183,9 @@ struct RayTracer {
                 config_importance.num_light_sample_per_unit *= 0.5;
                 RayTraceResult r = ray_trace(ray_refract, k_refract_index, depth + 1, config_importance);
                 if (r.hit) {
-                    Color absorb = res.primitive->material.color * 0.15f * -r.distance;
-                    Color transparency = expf(absorb);
+//                    Color absorb = color_pi * 0.15f * -r.distance;
+//                    Color transparency = expf(absorb);
+                    Color transparency(1, 1, 1);
                     res.color += r.color * transparency;
                 }
             }

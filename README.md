@@ -1,30 +1,39 @@
 # ray-tracing
 
-## Build and Run with GUI
-
-To run GUI, you need to install `GLFW3` and `SDL2` first:
-
-```
-ubuntu$ sudo apt install freeglut3-dev libsdl2-dev
-mac$ brew install glfw sdl2
-```
-
-Then build and run the code:
-
-```bash
-mkdir -p build && cd build
-cmake ..
-make -j
-./raytracer-gui
-```
-
 ## Build and Run without GUI
+
+To run the ray tracer, you need to install `libpng` first:
+
+```
+ubuntu$ sudo apt install libpng-dev
+mac$ sudo brew install libpng
+```
+
+Then build and run:
 
 ```bash
 mkdir -p build && cd build
 cmake -DGUI=OFF ..
 make
 ./raytracer-cli
+```
+
+## Build and Run with GUI
+
+To run GUI, you need to install `GLFW3` and `SDL2` first:
+
+```
+ubuntu$ sudo apt install freeglut3-dev libsdl2-dev libpng-dev
+mac$ brew install glfw sdl2 libpng
+```
+
+Then build and run:
+
+```bash
+mkdir -p build && cd build
+cmake ..
+make -j
+./raytracer-gui
 ```
 
 ## Run GUI on Remote Server
