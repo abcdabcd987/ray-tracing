@@ -4,6 +4,8 @@
 #include <GL/gl3w.h>
 #include <SDL.h>
 #include <thread>
+#include <fstream>
+#include <iomanip>
 #include "raytracer.hpp"
 #include "test_scene.hpp"
 
@@ -71,7 +73,7 @@ void show_toolbox_render() {
 }
 
 
-void show_toolbox_scene() {
+void show_toolbox_primitives() {
     static char buf[100], buf2[100];
     for (size_t i = 0; i < tracer.scene.primitives.size(); ++i) {
         Primitive *p = tracer.scene.primitives[i];
@@ -189,12 +191,44 @@ void show_toolbox_body() {
 }
 
 
+void show_toolbox_scene() {
+    static char filename[1024] = "../scene/myscene.json";
+    static char tips[1024];
+    ImGui::InputText("filename", filename, 1024);
+    if (ImGui::Button("save scene")) {
+        std::ofstream fout(filename);
+        if (fout) {
+            json j = tracer.scene.to_json();
+            fout << std::setw(4) << j;
+            sprintf(tips, "saved at %s", filename);
+        } else {
+            sprintf(tips, "cannot open file %s", filename);
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("load scene")) {
+        std::ifstream fin(filename);
+        if (fin) {
+            json j;
+            fin >> j;
+            tracer.scene.clear();
+            tracer.scene.from_json(j);
+            sprintf(tips, "loaded from %s", filename);
+        } else {
+            sprintf(tips, "cannot open file %s", filename);
+        }
+    }
+    ImGui::Text("%s", tips);
+}
+
+
 void show_toolbox_window() {
     ImGui::Begin("Toolbox");
     show_toolbox_info();
     if (ImGui::CollapsingHeader("Render", ImGuiTreeNodeFlags_DefaultOpen)) show_toolbox_render();
-    if (ImGui::CollapsingHeader("Scene")) show_toolbox_scene();
+    if (ImGui::CollapsingHeader("Primitives")) show_toolbox_primitives();
     if (ImGui::CollapsingHeader("Body")) show_toolbox_body();
+    if (ImGui::CollapsingHeader("Scene")) show_toolbox_scene();
     ImGui::End();
 }
 
@@ -250,7 +284,11 @@ int main(int argc, char** argv)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
 
-    add_scene2(tracer);
+    std::ifstream fin("scene.json");
+    json j;
+    fin >> j;
+    tracer.scene.from_json(j);
+//    add_scene2(tracer);
     config.num_light_sample_per_unit = 56.f;
     config.num_trace_depth = 4;
     config.num_diffuse_reflect_sample = 1;
@@ -302,8 +340,8 @@ int main(int argc, char** argv)
 //            ImGui::ShowTestWindow(&show_test_window);
 //        }
 
-        show_image_window();
         show_toolbox_window();
+        show_image_window();
 
         // Rendering
         glViewport(0, 0, (int)ImGui::GetIO().DisplaySize.x, (int)ImGui::GetIO().DisplaySize.y);

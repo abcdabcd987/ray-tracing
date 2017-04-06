@@ -6,6 +6,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-O3")
 
 include_directories(vendor/concurrentqueue)
+include_directories(vendor/json/src)
 
 find_package(PNG REQUIRED)
 include_directories(${PNG_INCLUDE_DIR})

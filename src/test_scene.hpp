@@ -10,7 +10,6 @@ void add_scene2(RayTracer &tracer) {
             .k_specular = .2f,
             .k_refract = 0,
             .k_refract_index = 1.f,
-            .k_ambient = 0,
             .texture = nullptr,
             .texture_uscale = 1,
             .texture_vscale = 1,
@@ -23,7 +22,6 @@ void add_scene2(RayTracer &tracer) {
             .k_specular = 0.f,
             .k_refract = 1.f,
             .k_refract_index = 1.f,
-            .k_ambient = 0,
             .texture = nullptr,
             .texture_uscale = 1,
             .texture_vscale = 1,
@@ -36,7 +34,6 @@ void add_scene2(RayTracer &tracer) {
             .k_specular = 0,
             .k_refract = 0,
             .k_refract_index = 1,
-            .k_ambient = 0,
             .texture = nullptr,
             .texture_uscale = 1,
             .texture_vscale = 1,
@@ -122,18 +119,38 @@ void add_scene2(RayTracer &tracer) {
 //    p->material.color = Color(0.7f, 0.7f, 1.0f);
 //    tracer.scene.add(p);
     m = def_material;
-    m.k_reflect = 0.0f;
+    m.k_reflect = 1.0f;
     m.k_refract = 0.0f;
-    m.k_diffuse = 1.0f;
-    m.color = Color(0.7f, 0.7f, 1.0f);
+    m.k_diffuse = 0.0f;
+    m.k_diffuse_reflect = 1.0f;
+    m.color = Color(1.0f, 1.0f, 1.0f);
 //    body = tracer.scene.load_obj("../resources/sphere.obj");
 //    body->set_material(m);
 //    body->offset(Vector3(2.5f, 1.0f, 2.0f));
 //
-    body = tracer.scene.load_obj("../resources/teapot.obj");
+    body = Body::load_obj("../resources/teapot.obj");
     body->set_material(m);
     body->scale(0.5f);
     body->offset(Vector3(-2.0f, 0.5f, 1.0f));
+    tracer.scene.add(body);
+
+    body = Body::load_obj("../resources/Arma.obj");
+    body->set_material(m);
+    body->scale(1.5f);
+    body->offset(Vector3(-2.0f, -1.0f, 0.0f));
+    tracer.scene.add(body);
+
+    body = Body::load_obj("../resources/horse.fine.90k.obj");
+    body->set_material(m);
+    body->scale(2.0f);
+    body->offset(Vector3(-0.0f, -1.0f, 0.0f));
+    tracer.scene.add(body);
+
+    body = Body::load_obj("../resources/bunny.fine.obj");
+    body->set_material(m);
+    body->scale(20.0f);
+    body->offset(Vector3(2.0f, -1.0f, 0.0f));
+    tracer.scene.add(body);
 //
 //    body = tracer.scene.load_obj("../resources/arma.obj");
 //    body->set_material(m);
@@ -190,7 +207,6 @@ void add_scene2(RayTracer &tracer) {
             .k_specular = 0.5f,
             .k_refract = 0.0f,
             .k_refract_index = 1.f,
-            .k_ambient = 0,
     };
 //    body = tracer.scene.load_obj("../resources/teapot.obj");
 //    body->set_material(teapot_material);
@@ -205,7 +221,6 @@ void add_scene2(RayTracer &tracer) {
             .k_specular = 0.1f,
             .k_refract = 0.0f,
             .k_refract_index = 1.f,
-            .k_ambient = 0,
     };
 //    body = tracer.scene.load_obj("../resources/sphere.obj");
 //    body->set_material(sphere_material);

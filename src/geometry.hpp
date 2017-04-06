@@ -5,6 +5,9 @@
 #include <cstring>
 #include <vector>
 #include <png.h>
+#include <json.hpp>
+
+using nlohmann::json;
 
 constexpr float EPS = 1e-4;
 
@@ -22,6 +25,12 @@ struct Vector3 {
     Vector3() : x(0), y(0), z(0) {}
 
     Vector3(float xx, float yy, float zz) : x(xx), y(yy), z(zz) {}
+
+    json to_json() const {
+        return {x, y, z};
+    }
+
+    Vector3(const json &in) : x(in[0]), y(in[1]), z(in[2]) {}
 
     Vector3 &operator+=(const Vector3 &v) {
         x += v.x, y += v.y, z += v.z;
@@ -44,16 +53,12 @@ struct Vector3 {
     }
 
     Vector3 &operator*=(float k) {
-        x *= k;
-        y *= k;
-        z *= k;
+        x *= k, y *= k, z *= k;
         return *this;
     }
 
     Vector3 &operator/=(float k) {
-        x /= k;
-        y /= k;
-        z /= k;
+        x /= k, y /= k, z /= k;
         return *this;
     }
 
@@ -104,6 +109,20 @@ struct Matrix3x3 {
     float m[3][3];
 
     Matrix3x3() : m() {}
+
+    json to_json() const {
+        json out = json::array();
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                out.push_back(m[i][j]);
+        return out;
+    }
+
+    Matrix3x3(const json &in) {
+        for (int i = 0, k = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j, ++k)
+                m[i][j] = in[k];
+    }
 
     float operator()(int i, int j) const { return m[i][j]; }
 
@@ -181,6 +200,13 @@ struct AABB {
 
     AABB(const Vector3 &pos_, const Vector3 &size_) : pos(pos_), size(size_) {}
 
+    json to_json() const {
+        return {{"pos",  pos.to_json()},
+                {"size", size.to_json()}};
+    }
+
+    AABB(const json &in) : pos(in["pos"]), size(in["size"]) {}
+
     bool intersect(const AABB &rhs) const {
         Vector3 v1 = rhs.pos, v2 = rhs.pos + rhs.size;
         Vector3 v3 = pos, v4 = pos + size;
@@ -239,6 +265,10 @@ struct Texture {
     virtual Color get_color(float u, float v) const = 0;
 
     virtual ~Texture() {}
+
+    virtual json to_json() const = 0;
+
+    static Texture *from_json(const json &in);
 };
 
 
@@ -246,6 +276,14 @@ struct GridTexture : public Texture {
     Color c0, c1;
 
     GridTexture(const Color &c0, const Color &c1) : c0(c0), c1(c1) {}
+
+    json to_json() const override {
+        return {{"type", "GridTexture"},
+                {"c0",   c0.to_json()},
+                {"c1",   c1.to_json()}};
+    }
+
+    GridTexture(const json &in) : c0(in["c0"]), c1(in["c1"]) {}
 
     Color get_color(float u, float v) const override {
         int a1 = (static_cast<int>(u) & 1) == 0;
@@ -260,11 +298,25 @@ struct GridTexture : public Texture {
 struct PNGTexture : public Texture {
     int width, height;
     Color *img;
+    std::string filename;
 
-    PNGTexture(const char *filename) : img(nullptr), width(0), height(0) {
-        bool success = read_png_file(filename, img, width, height);
+    PNGTexture(const char *filename_) : width(0), height(0), img(nullptr), filename(filename_) {
+        init();
+    }
+
+    json to_json() const override {
+        return {{"type",     "PNGTexture"},
+                {"filename", filename}};
+    }
+
+    PNGTexture(const json &in) : width(0), height(0), img(nullptr), filename(in["filename"].get<std::string>()) {
+        init();
+    }
+
+    void init() {
+        bool success = read_png_file(filename.c_str(), img, width, height);
         if (!success)
-            fprintf(stderr, "failed to load texture file: %s\n", filename);
+            fprintf(stderr, "failed to load texture file: %s\n", filename.c_str());
     }
 
     Color get_color(float u, float v) const override {
@@ -299,6 +351,16 @@ struct PNGTexture : public Texture {
 };
 
 
+inline Texture *Texture::from_json(const json &in) {
+    if (in.is_null()) return nullptr;
+    const std::string t = in["type"];
+    if (t == "GridTexture") return new GridTexture(in);
+    else if (t == "PNGTexture") return new PNGTexture(in);
+    fprintf(stderr, "unsupported texture type: %s\n", t.c_str());
+    return nullptr;
+}
+
+
 struct Material {
     Color color;
     float k_reflect;
@@ -307,10 +369,39 @@ struct Material {
     float k_specular;
     float k_refract;
     float k_refract_index;
-    float k_ambient;
     Texture *texture;
     float texture_uscale;
     float texture_vscale;
+
+    json to_json() const {
+        json out = {{"color",             color.to_json()},
+                    {"k_reflect",         k_reflect},
+                    {"k_diffuse",         k_diffuse},
+                    {"k_diffuse_reflect", k_diffuse_reflect},
+                    {"k_specular",        k_specular},
+                    {"k_refract",         k_refract},
+                    {"k_refract_index",   k_refract_index},
+                    {"texture_uscale",    texture_uscale},
+                    {"texture_vscale",    texture_vscale}};
+        if (texture) out["texture"] = texture->to_json();
+        else out["texture"] = nullptr;
+        return out;
+    }
+
+    static Material from_json(const json &in) {
+        return Material{
+                .color = Color(in["color"]),
+                .k_reflect = in["k_reflect"],
+                .k_diffuse = in["k_diffuse"],
+                .k_diffuse_reflect = in["k_diffuse_reflect"],
+                .k_specular = in["k_specular"],
+                .k_refract = in["k_refract"],
+                .k_refract_index = in["k_refract_index"],
+                .texture = Texture::from_json(in["texture"]),
+                .texture_uscale = in["texture_uscale"],
+                .texture_vscale = in["texture_vscale"]
+        };
+    }
 };
 
 
@@ -324,6 +415,16 @@ struct Primitive {
     Vector3 *light_samples;
 
     Primitive(Type type_) : type(type_), light(false), material(), light_samples(nullptr) {}
+
+    virtual json to_json() const {
+        return {{"light",    light},
+                {"material", material.to_json()}};
+    }
+
+    Primitive(Type type_, const json &in) : type(type_), light(in["light"]),
+                                            material(Material::from_json(in["material"])), light_samples(nullptr) {}
+
+    static Primitive *from_json(const json &in);
 
     virtual IntersectionResult intersect(const Ray &ray) const = 0;
 
@@ -357,6 +458,16 @@ struct Sphere : public Primitive {
 
     Sphere(const Vector3 &center_, float radius_) :
             Primitive(SPHERE), center(center_), radius(radius_) {}
+
+    json to_json() const override {
+        json out = Primitive::to_json();
+        out["type"] = "Sphere";
+        out["center"] = center.to_json();
+        out["radius"] = radius;
+        return out;
+    }
+
+    Sphere(const json &in) : Primitive(in, SPHERE), center(in["center"]), radius(in["radius"]) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         Vector3 v = ray.origin - center;
@@ -436,6 +547,12 @@ struct Triangle : public Primitive {
             : Primitive(TRIANGLE), v0(v0_), v1(v1_), v2(v2_),
               normal((v1->point - v0->point).cross(v2->point - v0->point).normalized()) {}
 
+    json to_json() const override {
+        json out = Primitive::to_json();
+        out["type"] = "Triangle"; // unsupported
+        return out;
+    }
+
     void set_vertices(Vertex *v0_, Vertex *v1_, Vertex *v2_) {
         v0 = v0_;
         v1 = v1_;
@@ -477,10 +594,11 @@ struct Triangle : public Primitive {
     }
 
     Vector3 get_normal(const Vector3 &pos) const override {
+        return normal;
         float u, v, dist;
         calc_intersect(Ray(Vector3(0, 0, 0), pos), u, v, dist);
         Vector3 n = v0->normal * (1 - u - v) + v1->normal * u + v2->normal * v;
-        return n; //.normalized();
+        return n.normalized();
     }
 
     AABB get_bounding_box() const {
@@ -502,7 +620,17 @@ struct Plane : public Primitive {
     float distance;
 
     Plane(const Vector3 &normal_, float distance_) :
-            Primitive(Primitive::PLANE), normal(normal_.normalized()), distance(distance_) {}
+            Primitive(PLANE), normal(normal_.normalized()), distance(distance_) {}
+
+    json to_json() const override {
+        json out = Primitive::to_json();
+        out["type"] = "Plane";
+        out["normal"] = normal.to_json();
+        out["distance"] = distance;
+        return out;
+    }
+
+    Plane(const json &in) : Primitive(PLANE, in), normal(in["normal"]), distance(in["distance"]) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         float d = normal.dot(ray.direction);
@@ -532,7 +660,16 @@ struct Plane : public Primitive {
 struct Box : public Primitive {
     AABB aabb;
 
-    Box(const AABB &aabb_) : Primitive(Primitive::BOX), aabb(aabb_) {}
+    Box(const AABB &aabb_) : Primitive(BOX), aabb(aabb_) {}
+
+    json to_json() const override {
+        json out = Primitive::to_json();
+        out["type"] = "Box";
+        out["aabb"] = aabb.to_json();
+        return out;
+    }
+
+    Box(const json &in) : Primitive(BOX, in), aabb(in["aabb"]) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         return aabb.intersect(ray);
@@ -555,6 +692,16 @@ struct Box : public Primitive {
         }
     }
 };
+
+
+inline Primitive *Primitive::from_json(const json &in) {
+    const std::string t = in["type"];
+    if (t == "Sphere") return new Sphere(in);
+    else if (t == "Plane") return new Plane(in);
+    else if (t == "Box") return new Box(in);
+    fprintf(stderr, "unsupported primitive type: %s\n", t.c_str());
+    return nullptr;
+}
 
 
 struct FindNearestResult {
@@ -664,7 +811,8 @@ private:
         if (ibox.distance > opt_dist) return res;
         if (node->child[0] || node->child[1]) {
             res.update(find_nearest(ray, node->child[0], opt_dist));
-            opt_dist = std::min(opt_dist, res.distance);
+            if (res.hit != IntersectionResult::MISS)
+                opt_dist = std::min(opt_dist, res.distance);
             res.update(find_nearest(ray, node->child[1], opt_dist));
         } else {
             for (const Triangle *t : node->triangles)
@@ -683,6 +831,75 @@ struct Body {
     Material material;
     Matrix3x3 w = Matrix3x3::scale(1.0f);
     Vector3 b;
+    std::string filename;
+
+    json to_json() const {
+        return {{"filename",  filename},
+                {"material",  material.to_json()},
+                {"transform", w.to_json()},
+                {"offset",    b.to_json()}};
+    }
+
+    static Body *from_json(const json &in) {
+        Body *body = load_obj(in["filename"].get<std::string>().c_str());
+        if (body) {
+            body->set_material(Material::from_json(in["material"]));
+            body->w = Matrix3x3(in["transform"]);
+            body->b = Vector3(in["offset"]);
+            body->build();
+        }
+        return body;
+    }
+
+    static Body *load_obj(const char *path) {
+        FILE *f = fopen(path, "r");
+        if (!f) {
+            fprintf(stderr, "failed to open obj file: %s\n", path);
+            return nullptr;
+        }
+
+        Body *body = new Body;
+        body->filename = path;
+        char buf[100];
+        while (fscanf(f, " %s", buf) != EOF) {
+            if (strcmp(buf, "v") == 0) {
+                float x, y, z;
+                fscanf(f, "%f%f%f", &x, &y, &z);
+                body->points.emplace_back(x, y, z);
+                body->vertices.emplace_back(new Vertex(x, y, z));
+            } else if (strcmp(buf, "f") == 0) {
+                Vertex *v[3];
+                for (int i = 0, idx; i < 3; ++i) {
+                    fscanf(f, " %s", buf);
+                    sscanf(buf, "%d", &idx);
+                    v[i] = body->vertices[idx - 1];
+                }
+                Triangle *triangle = new Triangle(v[0], v[1], v[2]);
+                for (int i = 0; i < 3; ++i)
+                    v[i]->neighbor.emplace_back(triangle);
+                body->triangles.emplace_back(triangle);
+            } else if (buf[0] == '#'
+                       || strcmp(buf, "mtllib") == 0
+                       || strcmp(buf, "vn") == 0
+                       || strcmp(buf, "vt") == 0
+                       || strcmp(buf, "s") == 0
+                       || strcmp(buf, "g") == 0
+                       || strcmp(buf, "o") == 0
+                       || strcmp(buf, "usemtl") == 0) {
+                // not supported
+                while (fgetc(f) != '\n');
+            } else {
+                // unexpected
+                delete body;
+                fprintf(stderr, "failed to parse obj file: %s\n", path);
+                return nullptr;
+            }
+        }
+        body->build();
+
+        fclose(f);
+        return body;
+    }
 
     void set_material(const Material &m) {
         material = m;
@@ -729,60 +946,41 @@ struct Scene {
     std::vector<Primitive *> primitives;
     std::vector<Body *> bodies;
 
+    json to_json() const {
+        json out_primitive = json::array();
+        json out_body = json::array();
+        for (auto p : primitives) out_primitive.push_back(p->to_json());
+        for (auto b : bodies) out_body.push_back(b->to_json());
+        return {{"primitive", out_primitive},
+                {"body",      out_body}};
+    }
+
+    void from_json(const json &in) {
+        for (const auto &p : in["primitive"])
+            add(Primitive::from_json(p));
+        for (const auto &b : in["body"])
+            add(Body::from_json(b));
+    }
+
     void add(Primitive *p) {
         primitives.emplace_back(p);
         if (p->light) lights.emplace_back(p);
     }
 
-    Body *load_obj(const char *path) {
-        FILE *f = fopen(path, "r");
-        if (!f) return nullptr;
+    void add(Body *b) {
+        bodies.emplace_back(b);
+    }
 
-        Body *body = new Body();
-        char buf[100];
-        while (fscanf(f, " %s", buf) != EOF) {
-            if (strcmp(buf, "v") == 0) {
-                float x, y, z;
-                fscanf(f, "%f%f%f", &x, &y, &z);
-                body->points.emplace_back(x, y, z);
-                body->vertices.emplace_back(new Vertex(x, y, z));
-            } else if (strcmp(buf, "f") == 0) {
-                Vertex *v[3];
-                for (int i = 0, idx; i < 3; ++i) {
-                    fscanf(f, " %s", buf);
-                    sscanf(buf, "%d", &idx);
-                    v[i] = body->vertices[idx - 1];
-                }
-                Triangle *triangle = new Triangle(v[0], v[1], v[2]);
-                for (int i = 0; i < 3; ++i)
-                    v[i]->neighbor.emplace_back(triangle);
-                body->triangles.emplace_back(triangle);
-            } else if (buf[0] == '#'
-                       || strcmp(buf, "mtllib") == 0
-                       || strcmp(buf, "vn") == 0
-                       || strcmp(buf, "vt") == 0
-                       || strcmp(buf, "s") == 0
-                       || strcmp(buf, "g") == 0
-                       || strcmp(buf, "o") == 0
-                       || strcmp(buf, "usemtl") == 0) {
-                // not supported
-                while (fgetc(f) != '\n');
-            } else {
-                // unexpected
-                delete body;
-                return nullptr;
-            }
-        }
-        body->build();
-        bodies.emplace_back(body);
-
-        fclose(f);
-        return body;
+    void clear() {
+        for (Primitive *p : primitives) delete p;
+        for (Body *b : bodies) delete b;
+        primitives.clear();
+        lights.clear();
+        bodies.clear();
     }
 
     ~Scene() {
-        for (Primitive *p : primitives) delete p;
-        for (Body *b : bodies) delete b;
+        clear();
     }
 };
 

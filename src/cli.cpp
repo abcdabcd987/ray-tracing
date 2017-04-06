@@ -1,4 +1,6 @@
 #include <string>
+#include <fstream>
+#include <iomanip>
 #include "raytracer.hpp"
 #include "test_scene.hpp"
 
@@ -46,8 +48,17 @@ int main(int argc, char** argv) {
     uint8_t *data = new uint8_t[width * height * 3];
     memset(data, 0, sizeof(*data) * (width * height * 3));
     RayTracer tracer;
+
     add_scene2(tracer);
-    tracer.render(data, width, height, config);
-    save_png(out, data, width, height);
+    std::ofstream fout("scene.json");
+    json j = tracer.scene.to_json();
+    fout << std::setw(4) << j;
+
+//    std::ifstream fin("scene.json");
+//    json j;
+//    fin >> j;
+//    tracer.scene.from_json(j);
+//    tracer.render(data, width, height, config);
+//    save_png(out, data, width, height);
     delete [] data;
 }

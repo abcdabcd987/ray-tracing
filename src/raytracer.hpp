@@ -7,7 +7,7 @@
 #include <tuple>
 #include <cstdint>
 #include <cassert>
-#include "concurrentqueue.h"
+#include <concurrentqueue.h>
 #include "geometry.hpp"
 
 struct RayTracer {
