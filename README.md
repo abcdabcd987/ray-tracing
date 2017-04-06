@@ -30,6 +30,7 @@ mac$ sudo brew install libpng
 Then build and run:
 
 ```
+$ git clone --recursive https://github.com/abcdabcd987/ray-tracing.git
 $ mkdir -p build && cd build
 $ cmake -DGUI=OFF .. && make
 $ ./raytracer-cli
@@ -57,6 +58,7 @@ mac$ brew install glfw sdl2 libpng
 Then build and run:
 
 ```
+$ git clone --recursive https://github.com/abcdabcd987/ray-tracing.git
 $ mkdir -p build && cd build
 $ cmake .. && make -j
 $ ./raytracer-gui
