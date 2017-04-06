@@ -122,6 +122,7 @@ $ ./raytracer-cli -w 2400 -h 1800 -d 5 -r 256 -l 1000 -j 8 -o ../rendered/scene2
    diffuse reflect samples    256
   light samples per volume    1000.000
                    workers    8
+rendered 4320000/4320000 pixels using 8 workers in 2059.191s...done
 ```
 
 - [x] **Soft Shadow**: Look at shadows!
