@@ -123,6 +123,8 @@ void show_toolbox_primitives() {
             ImGui::SliderFloat("k_specular", &p->material.k_specular, 0, 1);
             ImGui::SliderFloat("k_refract", &p->material.k_refract, 0, 1);
             ImGui::SliderFloat("k_refract_index", &p->material.k_refract_index, 0, 1.5f);
+            ImGui::DragFloat("texture_uscale", &p->material.texture_uscale, 0.05);
+            ImGui::DragFloat("texture_vscale", &p->material.texture_vscale, 0.05);
             ImGui::TreePop();
         }
     }
@@ -273,8 +275,8 @@ int main(int argc, char** argv)
     ImVec4 clear_color = ImColor(114, 144, 154).Value;
 
     width = 800, height = 600;
-    render_width = 800;
-    render_height = 600;
+    render_width = 400;
+    render_height = 300;
     data = new uint8_t[render_width * render_height * 3];
     memset(data, 0, sizeof(*data) * render_width * render_height * 3);
     glGenTextures(1, &tex);
@@ -284,7 +286,7 @@ int main(int argc, char** argv)
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, render_width, render_height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
 
 
-    std::ifstream fin("scene.json");
+    std::ifstream fin("../scene/scene1.json");
     json j;
     fin >> j;
     tracer.scene.from_json(j);
@@ -310,7 +312,7 @@ int main(int argc, char** argv)
                 bool success = tracer.render(data, image_width, image_height, config);
                 time_render_end = std::chrono::high_resolution_clock::now();
                 if (success)
-                    save_png("/tmp/ray-tracing.png", data, width, height);
+                    save_png("/tmp/ray-tracing.png", data, render_width, render_height);
                 else if (status == EXIT_RENDER)
                     return;
                 status = RENDERED;

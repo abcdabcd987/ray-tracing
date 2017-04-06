@@ -1,0 +1,276 @@
+{
+    "body": [
+        {
+            "filename": "../resources/horse.fine.90k.obj",
+            "material": {
+                "color": [
+                    0.800000011920929,
+                    0.600000023841858,
+                    0.600000023841858
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.601000010967255,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.543000042438507,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "offset": [
+                -4.35000038146973,
+                -0.459999918937683,
+                3.26999998092651
+            ],
+            "transform": [
+                1.93350005149841,
+                0.0,
+                0.0,
+                0.0,
+                1.93350005149841,
+                0.0,
+                0.0,
+                0.0,
+                1.93350005149841
+            ]
+        },
+        {
+            "filename": "../resources/dinosaur.2k.obj",
+            "material": {
+                "color": [
+                    0.600000023841858,
+                    0.850980401039124,
+                    0.760784327983856
+                ],
+                "k_diffuse": 0.749000012874603,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.0870000049471855,
+                "k_refract": 0.0,
+                "k_refract_index": 0.998000025749207,
+                "k_specular": 0.64000004529953,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "offset": [
+                2.70000028610229,
+                -0.529999971389771,
+                3.70999956130981
+            ],
+            "transform": [
+                0.0192893724888563,
+                0.00693750660866499,
+                -0.0478992685675621,
+                0.0146189872175455,
+                0.0483197197318077,
+                0.0128855770453811,
+                0.0461384281516075,
+                -0.0182105358690023,
+                0.0159427337348461
+            ]
+        }
+    ],
+    "primitive": [
+        {
+            "aabb": {
+                "pos": [
+                    -0.5,
+                    2.35999989509583,
+                    -2.4300000667572
+                ],
+                "size": [
+                    1.0,
+                    0.100000001490116,
+                    1.0
+                ]
+            },
+            "light": true,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 0.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.0,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "type": "Box"
+        },
+        {
+            "distance": 6.0,
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 1.0,
+                "k_reflect": 1.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.800000011920929,
+                "texture": null,
+                "texture_uscale": 0.100000001490116,
+                "texture_vscale": 0.100000001490116
+            },
+            "normal": [
+                0.0,
+                1.0,
+                0.0
+            ],
+            "type": "Plane"
+        },
+        {
+            "distance": 12.0,
+            "light": false,
+            "material": {
+                "color": [
+                    0.200000002980232,
+                    1.0,
+                    0.200000002980232
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.800000011920929,
+                "texture": null,
+                "texture_uscale": 0.100000001490116,
+                "texture_vscale": 0.100000001490116
+            },
+            "normal": [
+                1.0,
+                0.0,
+                0.0
+            ],
+            "type": "Plane"
+        },
+        {
+            "distance": 12.0,
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    0.200000002980232,
+                    0.200000002980232
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.800000011920929,
+                "texture": null,
+                "texture_uscale": 0.100000001490116,
+                "texture_vscale": 0.100000001490116
+            },
+            "normal": [
+                -1.0,
+                0.0,
+                0.0
+            ],
+            "type": "Plane"
+        },
+        {
+            "distance": 12.9700002670288,
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 1.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.209000006318092,
+                "texture": {
+                    "c0": [
+                        0.300000011920929,
+                        0.300000011920929,
+                        0.300000011920929
+                    ],
+                    "c1": [
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "type": "GridTexture"
+                },
+                "texture_uscale": 0.400000005960464,
+                "texture_vscale": 0.400000005960464
+            },
+            "normal": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "type": "Plane"
+        },
+        {
+            "center": [
+                -1.81000006198883,
+                -2.47000002861023,
+                1.12000000476837
+            ],
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 1.0,
+                "k_reflect": 1.0,
+                "k_refract": 0.0,
+                "k_refract_index": 0.0,
+                "k_specular": 0.540000021457672,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "radius": 1.0,
+            "type": "Sphere"
+        },
+        {
+            "center": [
+                0.46000000834465,
+                -1.40000009536743,
+                1.00999999046326
+            ],
+            "light": false,
+            "material": {
+                "color": [
+                    0.858823537826538,
+                    0.752941191196442,
+                    0.360784322023392
+                ],
+                "k_diffuse": 0.263999998569489,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.109000004827976,
+                "k_refract": 1.0,
+                "k_refract_index": 1.09500002861023,
+                "k_specular": 0.0,
+                "texture": null,
+                "texture_uscale": 0.0,
+                "texture_vscale": 0.0
+            },
+            "radius": 1.0,
+            "type": "Sphere"
+        }
+    ]
+}

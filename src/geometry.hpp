@@ -337,10 +337,10 @@ struct PNGTexture : public Texture {
         float w3 = (1 - fracu) * fracv;
         float w4 = fracu * fracv;
         // fetch four texels
-        Color c1 = img[u1 + v1 * width];
-        Color c2 = img[u2 + v1 * width];
-        Color c3 = img[u1 + v2 * width];
-        Color c4 = img[u2 + v2 * width];
+        Color c1 = img[std::min(width*height-1, std::max(0, u1 + v1 * width))];
+        Color c2 = img[std::min(width*height-1, std::max(0, u2 + v1 * width))];
+        Color c3 = img[std::min(width*height-1, std::max(0, u1 + v2 * width))];
+        Color c4 = img[std::min(width*height-1, std::max(0, u2 + v2 * width))];
         // scale and sum the four colors
         return c1 * w1 + c2 * w2 + c3 * w3 + c4 * w4;
     }
@@ -467,7 +467,7 @@ struct Sphere : public Primitive {
         return out;
     }
 
-    Sphere(const json &in) : Primitive(in, SPHERE), center(in["center"]), radius(in["radius"]) {}
+    Sphere(const json &in) : Primitive(SPHERE, in), center(in["center"]), radius(in["radius"]) {}
 
     IntersectionResult intersect(const Ray &ray) const override {
         Vector3 v = ray.origin - center;
@@ -594,7 +594,6 @@ struct Triangle : public Primitive {
     }
 
     Vector3 get_normal(const Vector3 &pos) const override {
-        return normal;
         float u, v, dist;
         calc_intersect(Ray(Vector3(0, 0, 0), pos), u, v, dist);
         Vector3 n = v0->normal * (1 - u - v) + v1->normal * u + v2->normal * v;

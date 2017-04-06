@@ -1,0 +1,274 @@
+{
+    "body": [
+        {
+            "filename": "../resources/Arma.obj",
+            "material": {
+                "color": [
+                    0.800000011920929,
+                    0.600000023841858,
+                    0.600000023841858
+                ],
+                "k_diffuse": 0.772000014781952,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.547000050544739,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.376000016927719,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "offset": [
+                -3.88000011444092,
+                -2.0,
+                3.26999998092651
+            ],
+            "transform": [
+                1.93350005149841,
+                0.0,
+                0.0,
+                0.0,
+                1.93350005149841,
+                0.0,
+                0.0,
+                0.0,
+                1.93350005149841
+            ]
+        },
+        {
+            "filename": "../resources/Buddha.obj",
+            "material": {
+                "color": [
+                    0.600000023841858,
+                    0.850980401039124,
+                    0.760784327983856
+                ],
+                "k_diffuse": 0.379000008106232,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 1.0,
+                "k_refract": 0.0,
+                "k_refract_index": 0.998000025749207,
+                "k_specular": 0.64000004529953,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "offset": [
+                0.0,
+                -2.0,
+                3.70999956130981
+            ],
+            "transform": [
+                2.02650022506714,
+                0.0,
+                0.0,
+                0.0,
+                2.02650022506714,
+                0.0,
+                0.0,
+                0.0,
+                2.02650022506714
+            ]
+        },
+        {
+            "filename": "../resources/bunny.fine.obj",
+            "material": {
+                "color": [
+                    0.600000023841858,
+                    0.600000023841858,
+                    0.800000011920929
+                ],
+                "k_diffuse": 0.215000003576279,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.338000029325485,
+                "k_refract": 1.0,
+                "k_refract_index": 1.01300001144409,
+                "k_specular": 0.125,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "offset": [
+                3.76999998092651,
+                -3.39000010490417,
+                2.0
+            ],
+            "transform": [
+                17.8350009918213,
+                0.0,
+                0.0,
+                0.0,
+                17.8350009918213,
+                0.0,
+                0.0,
+                0.0,
+                17.8350009918213
+            ]
+        },
+        {
+            "filename": "../resources/teapot.obj",
+            "material": {
+                "color": [
+                    0.752941191196442,
+                    0.560784339904785,
+                    0.705882370471954
+                ],
+                "k_diffuse": 0.772000014781952,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.547000050544739,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.376000016927719,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "offset": [
+                3.88000011444092,
+                2.0,
+                2.90999984741211
+            ],
+            "transform": [
+                0.606900036334991,
+                0.0,
+                0.0,
+                0.0,
+                0.478243768215179,
+                0.373644977807999,
+                0.0,
+                -0.373644977807999,
+                0.478243768215179
+            ]
+        }
+    ],
+    "primitive": [
+        {
+            "aabb": {
+                "pos": [
+                    -0.5,
+                    2.35999989509583,
+                    -2.4300000667572
+                ],
+                "size": [
+                    1.0,
+                    0.100000001490116,
+                    1.0
+                ]
+            },
+            "light": true,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 0.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.0,
+                "texture": null,
+                "texture_uscale": 1.0,
+                "texture_vscale": 1.0
+            },
+            "type": "Box"
+        },
+        {
+            "distance": 6.0,
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.800000011920929,
+                "texture": {
+                    "filename": "../resources/ground.png",
+                    "type": "PNGTexture"
+                },
+                "texture_uscale": 0.100000001490116,
+                "texture_vscale": 0.100000001490116
+            },
+            "normal": [
+                0.0,
+                1.0,
+                0.0
+            ],
+            "type": "Plane"
+        },
+        {
+            "distance": 12.9700002670288,
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 0.746000051498413,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 1.0,
+                "k_refract": 0.0,
+                "k_refract_index": 1.0,
+                "k_specular": 0.209000006318092,
+                "texture": {
+                    "c0": [
+                        0.300000011920929,
+                        0.300000011920929,
+                        0.300000011920929
+                    ],
+                    "c1": [
+                        1.0,
+                        1.0,
+                        1.0
+                    ],
+                    "type": "GridTexture"
+                },
+                "texture_uscale": 0.400000005960464,
+                "texture_vscale": 0.400000005960464
+            },
+            "normal": [
+                0.0,
+                0.0,
+                -1.0
+            ],
+            "type": "Plane"
+        },
+        {
+            "center": [
+                -1.82000005245209,
+                2.21000003814697,
+                2.23000001907349
+            ],
+            "light": false,
+            "material": {
+                "color": [
+                    1.0,
+                    1.0,
+                    1.0
+                ],
+                "k_diffuse": 1.0,
+                "k_diffuse_reflect": 0.0,
+                "k_reflect": 0.502000033855438,
+                "k_refract": 0.0,
+                "k_refract_index": 0.0,
+                "k_specular": 0.785000026226044,
+                "texture": {
+                    "filename": "../resources/watermelon.png",
+                    "type": "PNGTexture"
+                },
+                "texture_uscale": 1.20000004768372,
+                "texture_vscale": 1.20000004768372
+            },
+            "radius": 1.0,
+            "type": "Sphere"
+        }
+    ]
+}
