@@ -29,13 +29,13 @@ void add_scene2(RayTracer &tracer) {
             .texture_vscale = 1,
     };
     Material def_material = {
-            .color = Color(.2f, .2f, .2f),
+            .color = Color(1, 1, 1),
             .k_reflect = 0,
-            .k_diffuse = 0.2f,
+            .k_diffuse = 0,
             .k_diffuse_reflect = 0,
-            .k_specular = .8f,
+            .k_specular = 0,
             .k_refract = 0,
-            .k_refract_index = 1.5f,
+            .k_refract_index = 1,
             .k_ambient = 0,
             .texture = nullptr,
             .texture_uscale = 1,
@@ -47,6 +47,7 @@ void add_scene2(RayTracer &tracer) {
     Body *body;
     GridTexture *texture_grid = new GridTexture(Color(0, 0, 0), Color(1, 1, 1));
     PNGTexture *texture_ground = new PNGTexture("../resources/ground.png");
+    PNGTexture *texture_watermelon = new PNGTexture("../resources/watermelon.png");
 
     p = new Box(AABB(Vector3(-0.5f, 2.36f, -2.43f), Vector3(1.0f, 0.1f, 1.0f)));
     p->light = true;
@@ -89,18 +90,18 @@ void add_scene2(RayTracer &tracer) {
     p->material.texture = texture_grid;
     tracer.scene.add(p);
 
-    p = new Sphere(Vector3(-1.370f, -0.630f, 3.350f), 1.597f);
-    p->material = def_material;
-    p->material.k_reflect = 0.0f;
-    p->material.k_refract = 0.0f;
-    p->material.k_refract_index = 1.0f;
-    p->material.k_diffuse = 1.0f;
-    p->material.color = Color(1, 1, 1);
-    p->material.k_diffuse_reflect = 0.0f;
-    p->material.texture = texture_grid;
-    p->material.texture_uscale = 10;
-    p->material.texture_vscale = 10;
-    tracer.scene.add(p);
+//    p = new Sphere(Vector3(-1.370f, -0.630f, 3.350f), 1.597f);
+//    p->material = def_material;
+//    p->material.k_reflect = 0.0f;
+//    p->material.k_refract = 0.0f;
+//    p->material.k_refract_index = 1.0f;
+//    p->material.k_diffuse = 1.0f;
+//    p->material.color = Color(1, 1, 1);
+//    p->material.k_diffuse_reflect = 0.0f;
+//    p->material.texture = texture_watermelon;
+//    p->material.texture_uscale = 1;
+//    p->material.texture_vscale = 1;
+//    tracer.scene.add(p);
 
 //    p = new Sphere(Vector3(-1.370f, -0.630f, 3.350f), 1.597f);
 //    p->material = def_material;
@@ -121,17 +122,33 @@ void add_scene2(RayTracer &tracer) {
 //    p->material.color = Color(0.7f, 0.7f, 1.0f);
 //    tracer.scene.add(p);
     m = def_material;
-    m.k_reflect = 1.0f;
+    m.k_reflect = 0.0f;
     m.k_refract = 0.0f;
-    m.k_diffuse = 0.0f;
+    m.k_diffuse = 1.0f;
     m.color = Color(0.7f, 0.7f, 1.0f);
 //    body = tracer.scene.load_obj("../resources/sphere.obj");
 //    body->set_material(m);
 //    body->offset(Vector3(2.5f, 1.0f, 2.0f));
-//    body = tracer.scene.load_obj("../resources/teapot.obj");
+//
+    body = tracer.scene.load_obj("../resources/teapot.obj");
+    body->set_material(m);
+    body->scale(0.5f);
+    body->offset(Vector3(-2.0f, 0.5f, 1.0f));
+//
+//    body = tracer.scene.load_obj("../resources/arma.obj");
 //    body->set_material(m);
-//    body->scale(0.5f);
-//    body->offset(Vector3(-2.0f, 0.5f, 1.0f));
+//    body->scale(1.0f);
+//    body->offset(Vector3(-3.0f, -3.0f, 0.0f));
+
+//    body = tracer.scene.load_obj("../resources/horse.fine.90k.obj");
+//    body->set_material(m);
+//    body->scale(2.0f);
+//    body->offset(Vector3(0.0f, -1.0f, 2.0f));
+
+//    body = tracer.scene.load_obj("../resources/rabbit.obj");
+//    body->set_material(m);
+//    body->scale(1.0f);
+//    body->offset(Vector3(3.0f, -3.0f, 0.0f));
 
 //    m = def_material;
 //    m.k_reflect = 0.1f;
@@ -146,13 +163,13 @@ void add_scene2(RayTracer &tracer) {
 //    body->set_material(m);
 //    body->scale(0.4);
 //    body->offset(Vector3(-2.5f, -2.5f, -0.5f));
-    p = new Sphere(Vector3(-2, -2, 0), 1.0f);
-    p->material = def_material;
-    p->material.k_reflect = 0.2f;
-    p->material.k_refract = 0.8f;
-    p->material.k_refract_index = 1.2f;
-    p->material.color = Color(0.7f, 0.7f, 1.0f);
-    tracer.scene.add(p);
+//    p = new Sphere(Vector3(-2, -2, 0), 1.0f);
+//    p->material = def_material;
+//    p->material.k_reflect = 0.2f;
+//    p->material.k_refract = 0.8f;
+//    p->material.k_refract_index = 1.2f;
+//    p->material.color = Color(0.7f, 0.7f, 1.0f);
+//    tracer.scene.add(p);
 //    for (int x = -4; x <= 4; x++)
 //        for (int y = -4; y <= 4; y++) {
 //            Sphere *s = new Sphere(Vector3(-3.0f+x*0.4f, -3.0f+y*0.4f, 3.0f), 0.15f);

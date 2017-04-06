@@ -94,13 +94,7 @@ void show_toolbox_scene() {
             }
         } else if (Triangle *triangle = dynamic_cast<Triangle*>(p)) {
             sprintf(buf, "%zu: Triangle %s###scene-primitive-%zu", i, buf2, i);
-            if ((open = ImGui::TreeNode(buf))) {
-                Vector3 v0 = triangle->v0, v1 = triangle->v1, v2 = triangle->v2;
-                ImGui::DragFloat3("vertex 0", v0.data, 0.01f);
-                ImGui::DragFloat3("vertex 1", v1.data, 0.01f);
-                ImGui::DragFloat3("vertex 2", v2.data, 0.01f);
-                triangle->set_vertices(v0, v1, v2);
-            }
+            open = ImGui::TreeNode(buf);
         } else if (Plane *plane = dynamic_cast<Plane*>(p)) {
             sprintf(buf, "%zu: Plane %s###scene-primitive-%zu", i, buf2, i);
             if ((open = ImGui::TreeNode(buf))) {
@@ -127,7 +121,6 @@ void show_toolbox_scene() {
             ImGui::SliderFloat("k_specular", &p->material.k_specular, 0, 1);
             ImGui::SliderFloat("k_refract", &p->material.k_refract, 0, 1);
             ImGui::SliderFloat("k_refract_index", &p->material.k_refract_index, 0, 1.5f);
-            ImGui::SliderFloat("k_ambient", &p->material.k_ambient, 0, 1);
             ImGui::TreePop();
         }
     }
@@ -147,35 +140,49 @@ void show_toolbox_scene() {
         Plane *plane = new Plane(Vector3(1, 0, 0), 0);
         tracer.scene.add(plane);
     }
-    ImGui::SameLine();
-    if (ImGui::Button("new Triangle")) {
-        Triangle *triangle = new Triangle(Vector3(0, 0, 0), Vector3(0, 0, 0), Vector3(0, 0, 0));
-        tracer.scene.add(triangle);
-    }
 }
 
 
 void show_toolbox_body() {
     static char buf[100];
-    static float scale = 1.f, offset[3] = {0, 0, 0};
+    static float scale = 1.f, offset[3] = {0, 0, 0}, rotate[3] = {0, 0, 0};
     for (size_t i = 0; i < tracer.scene.bodies.size(); ++i) {
         Body *body = tracer.scene.bodies[i];
         sprintf(buf, "Body %zu###body-%zu", i, i);
         if (ImGui::TreeNode(buf)) {
-            ImGui::DragFloat("", &scale, 0.001f);
+            ImGui::DragFloat("###scale", &scale, 0.001f);
             ImGui::SameLine();
             if (ImGui::Button("scale")) {
                 body->scale(scale);
                 scale = 1.f;
             }
 
-            ImGui::DragFloat3("", offset, 0.01f);
+            ImGui::DragFloat3("###offset", offset, 0.01f);
             ImGui::SameLine();
             if (ImGui::Button("offset")) {
                 body->offset(Vector3(offset[0], offset[1], offset[2]));
                 offset[0] = 0, offset[1] = 0, offset[2] = 0;
             }
 
+            ImGui::DragFloat3("###rotate", rotate, 1.0f, -180.0f, +180.0f, "%.0f degree");
+            ImGui::SameLine();
+            if (ImGui::Button("rotate")) {
+                body->rotate_xyz(rotate[0] / 180.0f * static_cast<float>(M_PI),
+                                 rotate[1] / 180.0f * static_cast<float>(M_PI),
+                                 rotate[2] / 180.0f * static_cast<float>(M_PI));
+                rotate[0] = 0, rotate[1] = 0, rotate[2] = 0;
+            }
+
+            bool changed = false;
+            Material material = body->material;
+            changed = ImGui::ColorEdit3("color", material.color.data) || changed;
+            changed = ImGui::SliderFloat("k_reflect", &material.k_reflect, 0, 1) || changed;
+            changed = ImGui::SliderFloat("k_diffuse", &material.k_diffuse, 0, 1) || changed;
+            changed = ImGui::SliderFloat("k_diffuse_reflect", &material.k_diffuse_reflect, 0, 1) || changed;
+            changed = ImGui::SliderFloat("k_specular", &material.k_specular, 0, 1) || changed;
+            changed = ImGui::SliderFloat("k_refract", &material.k_refract, 0, 1) || changed;
+            changed = ImGui::SliderFloat("k_refract_index", &material.k_refract_index, 0, 1.5f) || changed;
+            if (changed) body->set_material(material);
             ImGui::TreePop();
         }
     }

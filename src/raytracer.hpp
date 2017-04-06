@@ -34,8 +34,11 @@ struct RayTracer {
         for (Body *body : scene.bodies)
             res.update(body->kdtree.find_nearest(ray));
 //        // use brute force:
-//        for (const Primitive *pr : scene.all_primitives)
+//        for (const Primitive *pr : scene.primitives)
 //            res.update(pr->intersect(ray), pr);
+//        for (Body *body : scene.bodies)
+//            for (const Triangle *t : body->triangles)
+//                res.update(t->intersect(ray), t);
         return res;
     }
 
@@ -202,7 +205,6 @@ struct RayTracer {
 
         for (Primitive *light : scene.lights)
             light->sample_light(config.num_light_sample_per_unit);
-        scene.build();
 
         float wx1 = -4, wx2 = 4, wy1 = 3, wy2 = -3;
         float dx = (wx2 - wx1) / width;
@@ -242,7 +244,7 @@ struct RayTracer {
             auto sec = (now - start).count() / 1e9;
             fprintf(stderr, "\rrendered %d/%d pixels using %d workers in %.3fs...", cnt, total, config.num_worker, sec);
             if (cnt == total) break;
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
 
             // if force stop
             if (flag_to_stop) {

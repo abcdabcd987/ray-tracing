@@ -99,6 +99,56 @@ struct Vector3 {
 
 typedef Vector3 Color;
 
+
+struct Matrix3x3 {
+    float m[3][3];
+
+    Matrix3x3() : m() {}
+
+    float operator()(int i, int j) const { return m[i][j]; }
+
+    float &operator()(int i, int j) { return m[i][j]; }
+
+    static Matrix3x3 scale(float k) {
+        Matrix3x3 m;
+        m(0, 0) = m(1, 1) = m(2, 2) = k;
+        return m;
+    }
+
+    static Matrix3x3 construct_rotate(int a0, int a1, int a2, float theta) {
+        float c = cosf(theta), s = sinf(theta);
+        Matrix3x3 m;
+        m(a0, a0) = 1;
+        m(a1, a1) = c, m(a1, a2) = -s;
+        m(a2, a1) = s, m(a2, a2) = c;
+        return m;
+    }
+
+    static Matrix3x3 rotate_x(float theta) { return construct_rotate(0, 1, 2, theta); }
+
+    static Matrix3x3 rotate_y(float theta) { return construct_rotate(0, 2, 1, theta); }
+
+    static Matrix3x3 rotate_z(float theta) { return construct_rotate(2, 0, 1, theta); }
+
+    friend Matrix3x3 operator*(const Matrix3x3 &a, const Matrix3x3 &b) {
+        Matrix3x3 c;
+        for (int k = 0; k < 3; ++k)
+            for (int i = 0; i < 3; ++i)
+                for (int j = 0; j < 3; ++j)
+                    c(i, j) += a(i, k) * b(k, j);
+        return c;
+    }
+
+    friend Vector3 operator*(const Matrix3x3 &m, const Vector3 &v) {
+        return Vector3(
+                m(0, 0) * v.data[0] + m(0, 1) * v.data[1] + m(0, 2) * v.data[2],
+                m(1, 0) * v.data[0] + m(1, 1) * v.data[1] + m(1, 2) * v.data[2],
+                m(2, 0) * v.data[0] + m(2, 1) * v.data[1] + m(2, 2) * v.data[2]
+        );
+    }
+};
+
+
 inline bool read_png_file(const char *filename, Color *(&out), int &width, int &height);
 
 inline float randf() {
@@ -187,6 +237,7 @@ struct AABB {
 
 struct Texture {
     virtual Color get_color(float u, float v) const = 0;
+
     virtual ~Texture() {}
 };
 
@@ -210,7 +261,7 @@ struct PNGTexture : public Texture {
     int width, height;
     Color *img;
 
-    PNGTexture(const char *filename): img(nullptr), width(0), height(0) {
+    PNGTexture(const char *filename) : img(nullptr), width(0), height(0) {
         bool success = read_png_file(filename, img, width, height);
         if (!success)
             fprintf(stderr, "failed to load texture file: %s\n", filename);
@@ -219,10 +270,10 @@ struct PNGTexture : public Texture {
     Color get_color(float u, float v) const override {
         if (!img) return Color(1, 1, 1);
         // fetch a bilinearly filtered texel
-        float fu = (u + 1000.5f) * width;
+        float fu = (u + 1000.0f) * width;
         float fv = (v + 1000.0f) * height;
-        int u1 = ((int)fu) % width;
-        int v1 = ((int)fv) % height;
+        int u1 = ((int) fu) % width;
+        int v1 = ((int) fv) % height;
         int u2 = (u1 + 1) % width;
         int v2 = (v1 + 1) % height;
         // calculate fractional parts of u and v
@@ -232,7 +283,7 @@ struct PNGTexture : public Texture {
         float w1 = (1 - fracu) * (1 - fracv);
         float w2 = fracu * (1 - fracv);
         float w3 = (1 - fracu) * fracv;
-        float w4 = fracu *  fracv;
+        float w4 = fracu * fracv;
         // fetch four texels
         Color c1 = img[u1 + v1 * width];
         Color c2 = img[u2 + v1 * width];
@@ -362,78 +413,88 @@ struct Sphere : public Primitive {
 };
 
 
+struct Triangle;
+
+struct Vertex {
+    Vector3 point;
+    Vector3 normal;
+    std::vector<Triangle *> neighbor;
+
+    Vertex() : point(), normal(), neighbor() {}
+
+    Vertex(float x, float y, float z) : point(x, y, z), normal(), neighbor() {}
+
+    void calc_normal();
+};
+
+
 struct Triangle : public Primitive {
-    Vector3 v0, v1, v2;
+    Vertex *v0, *v1, *v2;
     Vector3 normal;
 
-    Triangle(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_)
+    Triangle(Vertex *v0_, Vertex *v1_, Vertex *v2_)
             : Primitive(TRIANGLE), v0(v0_), v1(v1_), v2(v2_),
-              normal((v1 - v0).cross(v2 - v0).normalized()) {}
+              normal((v1->point - v0->point).cross(v2->point - v0->point).normalized()) {}
 
-    void set_vertices(const Vector3 &v0_, const Vector3 &v1_, const Vector3 &v2_) {
+    void set_vertices(Vertex *v0_, Vertex *v1_, Vertex *v2_) {
         v0 = v0_;
         v1 = v1_;
         v2 = v2_;
-        normal = (v1 - v0).cross(v2 - v0).normalized();
+        normal = (v1->point - v0->point).cross(v2->point - v0->point).normalized();
     }
 
-    IntersectionResult intersect(const Ray &ray) const override {
-        // see https://www.scratchapixel.com/code.php?id=11&origin=/lessons/3d-basic-rendering/ray-tracing-polygon-mesh
+    // see https://www.scratchapixel.com/code.php?id=11&origin=/lessons/3d-basic-rendering/ray-tracing-polygon-mesh
+    bool calc_intersect(const Ray &ray, float &u, float &v, float &dist) const {
         IntersectionResult res = {.hit = IntersectionResult::MISS};
-        Vector3 v0v1 = v1 - v0;
-        Vector3 v0v2 = v2 - v0;
+        Vector3 v0v1 = v1->point - v0->point;
+        Vector3 v0v2 = v2->point - v0->point;
         Vector3 pvec = ray.direction.cross(v0v2);
         float det = v0v1.dot(pvec);
 
         // ray and triangle are parallel if det is close to 0
-        if (fabs(det) < EPS) return res;
+        if (fabs(det) < EPS) return false;
 
         float invDet = 1 / det;
 
-        Vector3 tvec = ray.origin - v0;
-        float u = tvec.dot(pvec) * invDet;
-        if (u < 0 || u > 1) return res;
+        Vector3 tvec = ray.origin - v0->point;
+        u = tvec.dot(pvec) * invDet;
+        if (u < 0 || u > 1) return false;
 
         Vector3 qvec = tvec.cross(v0v1);
-        float v = ray.direction.dot(qvec) * invDet;
-        if (v < 0 || u + v > 1) return res;
+        v = ray.direction.dot(qvec) * invDet;
+        if (v < 0 || u + v > 1) return false;
 
-        float dist = v0v2.dot(qvec) * invDet;
-        if (dist < 0) return res;
-        res.hit = ray.direction.dot(normal) > 0 ? IntersectionResult::INSIDE : IntersectionResult::HIT;
-        res.distance = dist;
-        return res;
-//        if (dist < 0) return {.hit = IntersectionResult::INSIDE, .distance = dist};
-//        return {.hit = IntersectionResult::HIT, .distance = dist};
+        dist = v0v2.dot(qvec) * invDet;
+        return dist >= 0;
+    }
+
+    IntersectionResult intersect(const Ray &ray) const override {
+        float u, v, dist;
+        bool intersect = calc_intersect(ray, u, v, dist);
+        if (!intersect) return {.hit = IntersectionResult::MISS};
+        return {.hit = ray.direction.dot(normal) > 0 ? IntersectionResult::INSIDE : IntersectionResult::HIT,
+                .distance = dist};
     }
 
     Vector3 get_normal(const Vector3 &pos) const override {
-        return normal;
+        float u, v, dist;
+        calc_intersect(Ray(Vector3(0, 0, 0), pos), u, v, dist);
+        Vector3 n = v0->normal * (1 - u - v) + v1->normal * u + v2->normal * v;
+        return n; //.normalized();
     }
 
     AABB get_bounding_box() const {
-        Vector3 vmin = min(v0, min(v1, v2));
-        Vector3 vmax = max(v0, max(v1, v2));
+        Vector3 vmin = min(v0->point, min(v1->point, v2->point));
+        Vector3 vmax = max(v0->point, max(v1->point, v2->point));
         return AABB(vmin, vmax - vmin);
     }
-
-    float get_volume() const override {
-        // pretend that a triangle has a volume
-        float area = .5f * (v2 - v0).cross(v1 - v0).length();
-        return area * 0.1f;
-    }
-
-    void sample_light(const float num_light_sample_per_unit) override {
-        int n = alloc_light_samples(num_light_sample_per_unit);
-        for (int i = 0; i < n; ++i) {
-            // see: http://math.stackexchange.com/questions/18686/uniform-random-point-in-triangle
-            Vector3 v0v1 = v1 - v0;
-            Vector3 v0v2 = v2 - v0;
-            float sqrt_r1 = sqrtf(randf()), r2 = randf();
-            light_samples[i] = sqrt_r1 * (1.f - r2) * v0v1 + r2 * sqrt_r1 * v0v2;
-        }
-    }
 };
+
+inline void Vertex::calc_normal() {
+    Vector3 n;
+    for (Triangle *t : neighbor) n += t->normal;
+    normal = n / neighbor.size();
+}
 
 
 struct Plane : public Primitive {
@@ -559,9 +620,9 @@ private:
     float get_split_plane_naive(const std::vector<const Triangle *> &triangles, int axis) const {
         float sum = 0;
         for (const Triangle *t : triangles) {
-            sum += t->v0.data[axis];
-            sum += t->v1.data[axis];
-            sum += t->v2.data[axis];
+            sum += t->v0->point.data[axis];
+            sum += t->v1->point.data[axis];
+            sum += t->v2->point.data[axis];
         }
         return sum / (3 * triangles.size());
     }
@@ -576,8 +637,10 @@ private:
             int common = 0;
             std::vector<const Triangle *> lef, rig;
             for (const Triangle *t : triangles) {
-                bool in_lef = t->v0.data[axis] <= plane || t->v1.data[axis] <= plane || t->v2.data[axis] <= plane;
-                bool in_rig = t->v0.data[axis] >= plane || t->v1.data[axis] >= plane || t->v2.data[axis] >= plane;
+                bool in_lef = t->v0->point.data[axis] <= plane || t->v1->point.data[axis] <= plane ||
+                              t->v2->point.data[axis] <= plane;
+                bool in_rig = t->v0->point.data[axis] >= plane || t->v1->point.data[axis] >= plane ||
+                              t->v2->point.data[axis] >= plane;
                 if (in_lef) lef.emplace_back(t);
                 if (in_rig) rig.emplace_back(t);
                 if (in_lef && in_rig) ++common;
@@ -613,50 +676,61 @@ private:
 
 
 struct Body {
+    std::vector<Vector3> points;
+    std::vector<Vertex *> vertices;
     std::vector<Triangle *> triangles;
     KDTree kdtree;
+    Material material;
+    Matrix3x3 w = Matrix3x3::scale(1.0f);
+    Vector3 b;
 
-    Body() : triangles(), kdtree() {}
-
-    void set_material(const Material &m) { for (Triangle *t : triangles) t->material = m; }
+    void set_material(const Material &m) {
+        material = m;
+        for (Triangle *t : triangles) t->material = m;
+    }
 
     void scale(float k) {
-        for (Triangle *t : triangles) {
-            t->v0 *= k;
-            t->v1 *= k;
-            t->v2 *= k;
-        }
+        w = Matrix3x3::scale(k) * w;
+        build();
     }
 
     void offset(const Vector3 &offset) {
-        for (Triangle *t : triangles) {
-            t->v0 += offset;
-            t->v1 += offset;
-            t->v2 += offset;
-        }
+        b += offset;
+        build();
+    }
+
+    void rotate_xyz(float rad_x, float rad_y, float rad_z) {
+        w = Matrix3x3::rotate_x(rad_x) * w;
+        w = Matrix3x3::rotate_y(rad_y) * w;
+        w = Matrix3x3::rotate_z(rad_z) * w;
+        build();
     }
 
     void build() {
+        for (size_t i = 0; i < points.size(); ++i)
+            vertices[i]->point = w * points[i] + b;
+        for (Triangle *t : triangles)
+            t->set_vertices(t->v0, t->v1, t->v2);
+        for (Vertex *v : vertices)
+            v->calc_normal();
         std::vector<const Triangle *> v(triangles.begin(), triangles.end());
         kdtree.build(v);
+    }
+
+    ~Body() {
+        for (Vertex *v : vertices) delete v;
+        for (Triangle *t : triangles) delete t;
     }
 };
 
 
 struct Scene {
-    std::vector<Primitive *> all_primitives;
     std::vector<Primitive *> lights;
     std::vector<Primitive *> primitives;
     std::vector<Body *> bodies;
 
-    void build() {
-        for (Body *body : bodies)
-            body->build();
-    }
-
     void add(Primitive *p) {
-        all_primitives.emplace_back(p);
-        if (p->type != Primitive::TRIANGLE) primitives.emplace_back(p);
+        primitives.emplace_back(p);
         if (p->light) lights.emplace_back(p);
     }
 
@@ -664,24 +738,25 @@ struct Scene {
         FILE *f = fopen(path, "r");
         if (!f) return nullptr;
 
-        std::vector<Vector3> vertices;
         Body *body = new Body();
         char buf[100];
         while (fscanf(f, " %s", buf) != EOF) {
             if (strcmp(buf, "v") == 0) {
                 float x, y, z;
                 fscanf(f, "%f%f%f", &x, &y, &z);
-                vertices.emplace_back(x, y, z);
+                body->points.emplace_back(x, y, z);
+                body->vertices.emplace_back(new Vertex(x, y, z));
             } else if (strcmp(buf, "f") == 0) {
-                int v[3];
-                for (int i = 0; i < 3; ++i) {
+                Vertex *v[3];
+                for (int i = 0, idx; i < 3; ++i) {
                     fscanf(f, " %s", buf);
-                    sscanf(buf, "%d", &v[i]);
-                    --v[i];
+                    sscanf(buf, "%d", &idx);
+                    v[i] = body->vertices[idx - 1];
                 }
-                Triangle *triangle = new Triangle(vertices[v[0]], vertices[v[1]], vertices[v[2]]);
+                Triangle *triangle = new Triangle(v[0], v[1], v[2]);
+                for (int i = 0; i < 3; ++i)
+                    v[i]->neighbor.emplace_back(triangle);
                 body->triangles.emplace_back(triangle);
-                add(triangle);
             } else if (buf[0] == '#'
                        || strcmp(buf, "mtllib") == 0
                        || strcmp(buf, "vn") == 0
@@ -694,9 +769,11 @@ struct Scene {
                 while (fgetc(f) != '\n');
             } else {
                 // unexpected
+                delete body;
                 return nullptr;
             }
         }
+        body->build();
         bodies.emplace_back(body);
 
         fclose(f);
@@ -704,7 +781,7 @@ struct Scene {
     }
 
     ~Scene() {
-        for (Primitive *p : all_primitives) delete p;
+        for (Primitive *p : primitives) delete p;
         for (Body *b : bodies) delete b;
     }
 };
@@ -751,32 +828,33 @@ inline Vector3 uniform_sample_hemisphere() {
 inline bool read_png_file(const char *filename, Color *(&out), int &width, int &height) {
     // read png
     FILE *fp = fopen(filename, "rb");
+    if (!fp) return false;
     png_structp png = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
-    if(!png) return false;
+    if (!png) return false;
     png_infop info = png_create_info_struct(png);
-    if(!info) return false;
-    if(setjmp(png_jmpbuf(png))) return false;
+    if (!info) return false;
+    if (setjmp(png_jmpbuf(png))) return false;
     png_init_io(png, fp);
     png_read_info(png, info);
     width = static_cast<int>(png_get_image_width(png, info));
     height = static_cast<int>(png_get_image_height(png, info));
     png_byte color_type = png_get_color_type(png, info);
-    png_byte bit_depth  = png_get_bit_depth(png, info);
-    if(bit_depth == 16) png_set_strip_16(png);
-    if(color_type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
-    if(color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) png_set_expand_gray_1_2_4_to_8(png);
-    if(png_get_valid(png, info, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png);
-    if(color_type == PNG_COLOR_TYPE_RGB ||
-       color_type == PNG_COLOR_TYPE_GRAY ||
-       color_type == PNG_COLOR_TYPE_PALETTE)
+    png_byte bit_depth = png_get_bit_depth(png, info);
+    if (bit_depth == 16) png_set_strip_16(png);
+    if (color_type == PNG_COLOR_TYPE_PALETTE) png_set_palette_to_rgb(png);
+    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) png_set_expand_gray_1_2_4_to_8(png);
+    if (png_get_valid(png, info, PNG_INFO_tRNS)) png_set_tRNS_to_alpha(png);
+    if (color_type == PNG_COLOR_TYPE_RGB ||
+        color_type == PNG_COLOR_TYPE_GRAY ||
+        color_type == PNG_COLOR_TYPE_PALETTE)
         png_set_filler(png, 0xFF, PNG_FILLER_AFTER);
-    if(color_type == PNG_COLOR_TYPE_GRAY ||
-       color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+    if (color_type == PNG_COLOR_TYPE_GRAY ||
+        color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
         png_set_gray_to_rgb(png);
     png_read_update_info(png, info);
-    png_bytep *row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
-    for(int y = 0; y < height; y++)
-        row_pointers[y] = (png_byte*)malloc(png_get_rowbytes(png,info));
+    png_bytep *row_pointers = (png_bytep *) malloc(sizeof(png_bytep) * height);
+    for (int y = 0; y < height; y++)
+        row_pointers[y] = (png_byte *) malloc(png_get_rowbytes(png, info));
     png_read_image(png, row_pointers);
 
     // save to Color array
@@ -809,14 +887,14 @@ inline bool _save_png(const char *path, uint8_t *data, int width, int height) {
     if (!info) return false;
     if (setjmp(png_jmpbuf(png))) return false;
     png_init_io(png, fp);
-    png_set_IHDR(png, info, (png_uint_32) width, (png_uint_32)height, 8,
+    png_set_IHDR(png, info, (png_uint_32) width, (png_uint_32) height, 8,
                  PNG_COLOR_TYPE_RGBA,
                  PNG_INTERLACE_NONE,
                  PNG_COMPRESSION_TYPE_DEFAULT,
                  PNG_FILTER_TYPE_DEFAULT);
     png_write_info(png, info);
-    png_bytep *row_pointers = (png_bytep*)malloc(sizeof(png_bytep) * height);
-    for(int y = 0; y < height; y++) {
+    png_bytep *row_pointers = (png_bytep *) malloc(sizeof(png_bytep) * height);
+    for (int y = 0; y < height; y++) {
         row_pointers[y] = (png_byte *) malloc(png_get_rowbytes(png, info));
         png_byte *row = row_pointers[y];
         for (int x = 0; x < width; ++x) {
@@ -828,7 +906,7 @@ inline bool _save_png(const char *path, uint8_t *data, int width, int height) {
     }
     png_write_image(png, row_pointers);
     png_write_end(png, NULL);
-    for(int y = 0; y < height; y++)
+    for (int y = 0; y < height; y++)
         free(row_pointers[y]);
     free(row_pointers);
     fclose(fp);

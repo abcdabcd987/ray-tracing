@@ -11,7 +11,7 @@ void help() {
     fputs("   -r <INT>        number of diffuse reflect samples\n", stderr);
     fputs("   -l <FLOAT>      number of light samples per unit volume\n", stderr);
     fputs("   -j <INT>        number of thread workers\n", stderr);
-    fputs("   -o <STRING>     output path\n", stderr);
+    fputs("   -o <STRING>     path to output png image\n", stderr);
     exit(EXIT_FAILURE);
 }
 
