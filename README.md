@@ -64,6 +64,8 @@ $ cmake .. && make -j
 $ ./raytracer-gui
 ```
 
+![GUI](gui.png?raw=true)
+
 ## Run GUI on Remote Server
 
 Remote OpenGL program can be forwarded to local using [xpra](https://xpra.org).
